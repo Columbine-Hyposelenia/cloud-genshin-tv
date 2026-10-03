@@ -319,12 +319,53 @@ public class MainActivity extends Activity {
 
     @Override
     public boolean onGenericMotionEvent(android.view.MotionEvent event) {
-        if ((event.getSource() & InputDevice.SOURCE_MOUSE) == InputDevice.SOURCE_MOUSE) {
+        int source = event.getSource();
+        if ((source & InputDevice.SOURCE_MOUSE) == InputDevice.SOURCE_MOUSE
+                || (source & InputDevice.SOURCE_TOUCHSCREEN) == InputDevice.SOURCE_TOUCHSCREEN) {
             float x = event.getX();
             float y = event.getY();
-            virtualMouse.showAt(x, y);
-            scheduleMouseHide();
-            return webView.dispatchTouchEvent(event);
+            int action = event.getActionMasked();
+
+            if (action == android.view.MotionEvent.ACTION_HOVER_MOVE
+                    || action == android.view.MotionEvent.ACTION_MOVE) {
+                virtualMouse.showAt(x, y);
+                scheduleMouseHide();
+                return webView.dispatchTouchEvent(event);
+            }
+
+            if (action == 11 || action == 12) {
+                virtualMouse.showAt(x, y);
+                scheduleMouseHide();
+                int buttonState = event.getButtonState();
+                boolean isLeft = (buttonState & android.view.MotionEvent.BUTTON_PRIMARY) != 0;
+                boolean isRight = (buttonState & android.view.MotionEvent.BUTTON_SECONDARY) != 0;
+                if (isLeft || isRight) {
+                    int touchAction = (action == 11)
+                            ? android.view.MotionEvent.ACTION_DOWN
+                            : android.view.MotionEvent.ACTION_UP;
+                    long downTime = event.getDownTime();
+                    long eventTime = event.getEventTime();
+                    android.view.MotionEvent touchEvent = android.view.MotionEvent.obtain(
+                            downTime, eventTime, touchAction, x, y, 0);
+                    touchEvent.setSource(InputDevice.SOURCE_TOUCHSCREEN);
+                    webView.dispatchTouchEvent(touchEvent);
+                    touchEvent.recycle();
+                    return true;
+                }
+                return webView.dispatchTouchEvent(event);
+            }
+
+            if (action == android.view.MotionEvent.ACTION_SCROLL) {
+                float vScroll = event.getAxisValue(android.view.MotionEvent.AXIS_VSCROLL);
+                float hScroll = event.getAxisValue(android.view.MotionEvent.AXIS_HSCROLL);
+                if (vScroll != 0) {
+                    webView.scrollBy(0, (int) (-vScroll * 60));
+                }
+                if (hScroll != 0) {
+                    webView.scrollBy((int) (-hScroll * 60), 0);
+                }
+                return true;
+            }
         }
         return super.onGenericMotionEvent(event);
     }
