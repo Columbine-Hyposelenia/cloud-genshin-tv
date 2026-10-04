@@ -17,10 +17,10 @@ public class MainActivity extends Activity {
 
     private static final String[] MIRRORS = {
             "https://gh-proxy.com/" + RAW,
-            "https://litter.catbox.moe/bw53cj.apk",
             "https://ghproxy.net/" + RAW,
-            "https://gh.ddlc.top/" + RAW,
+            "https://litter.catbox.moe/bw53cj.apk",
             "https://cors.isteed.cc/" + RAW,
+            "https://gh.ddlc.top/" + RAW,
             RAW,
     };
 
