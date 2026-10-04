@@ -1,0 +1,62 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.cloudgenshin.tv'
+    compileSdk 36
+
+    signingConfigs {
+        debug {
+            storeFile file(rootProject.file('debug.keystore'))
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
+    }
+
+    defaultConfig {
+        applicationId 'com.cloudgenshin.tv'
+        minSdk 21
+        targetSdk 22
+        versionCode 1
+        versionName '1.0.0'
+        ndk {
+            abiFilters 'armeabi-v7a'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            shrinkResources false
+            signingConfig signingConfigs.debug
+        }
+        debug {
+            signingConfig signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging true
+        }
+        resources {
+            excludes += ['META-INF/*.kotlin_module', 'META-INF/*.version', 'META-INF/proguard/**']
+        }
+    }
+
+    lint {
+        abortOnError false
+        checkReleaseBuilds false
+    }
+}
+
+dependencies {
+    implementation 'org.mozilla.geckoview:geckoview-armeabi-v7a:144.0.20251027123126'
+}
