@@ -5,3 +5,6 @@ local.properties
 build/
 build_patched/
 *.idsig
+verify_smali/
+/cloud-genshin.apk
+/cloud-genshin-installer.apk

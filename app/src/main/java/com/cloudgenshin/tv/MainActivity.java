@@ -46,6 +46,17 @@ public class MainActivity extends Activity {
     private TextView mOverlay;
     private final Handler mHandler = new Handler(Looper.getMainLooper());
     private int mCrashCount;
+    private boolean mOverlayDismissable;
+
+    private final Runnable mOverlayTimeout = new Runnable() {
+        @Override
+        public void run() {
+            if (mOverlayDismissable) {
+                mOverlayDismissable = false;
+                hideStatus();
+            }
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -289,6 +300,8 @@ public class MainActivity extends Activity {
         runOnUiThread(new Runnable() {
             @Override
             public void run() {
+                mOverlayDismissable = false;
+                mHandler.removeCallbacks(mOverlayTimeout);
                 mOverlay.setVisibility(View.GONE);
             }
         });
@@ -302,6 +315,9 @@ public class MainActivity extends Activity {
                 builder.append("无法打开云·原神\n");
                 builder.append(uri).append('\n');
                 builder.append("错误代码：").append(error.code);
+                mOverlayDismissable = true;
+                mHandler.removeCallbacks(mOverlayTimeout);
+                mHandler.postDelayed(mOverlayTimeout, 30000);
                 mOverlay.setText(builder.toString());
                 mOverlay.setVisibility(View.VISIBLE);
             }
@@ -317,9 +333,24 @@ public class MainActivity extends Activity {
         builder.append("硬件解码：").append(DecoderMode.hardwareDecode() ? "开启" : "关闭").append('\n');
         builder.append("会话状态：")
                 .append(mSession != null && mSession.isOpen() ? "已打开" : "未打开").append('\n');
+        builder.append("已识别键盘：").append(mKeyboardRouter.keyboardCount()).append(" 个\n");
+        int lastKey = mKeyboardRouter.lastKeyCode();
+        if (lastKey >= 0) {
+            builder.append("最近按键：").append(KeyEvent.keyCodeToString(lastKey)).append('\n');
+            long age = mKeyboardRouter.lastKeyAgeMillis();
+            builder.append("按键来源设备：").append(mKeyboardRouter.lastKeyDevice())
+                    .append("（").append(age >= 0 ? age + "ms 前" : "无").append("）\n");
+        }
         builder.append("GL_RENDERER：").append(glRenderer()).append('\n');
         builder.append("目标：").append(TARGET_URL);
-        showStatus(builder.toString());
+        showDismissable(builder.toString(), 20000);
+    }
+
+    private void showDismissable(final String text, int timeoutMs) {
+        showStatus(text);
+        mOverlayDismissable = true;
+        mHandler.removeCallbacks(mOverlayTimeout);
+        mHandler.postDelayed(mOverlayTimeout, timeoutMs);
     }
 
     private String graphicsLabel() {
@@ -356,6 +387,14 @@ public class MainActivity extends Activity {
     public boolean dispatchKeyEvent(KeyEvent event) {
         if (mToolsMenu != null && mToolsMenu.isShowing()) {
             return super.dispatchKeyEvent(event);
+        }
+        if (mOverlayDismissable && mOverlay != null
+                && mOverlay.getVisibility() == View.VISIBLE
+                && event.getAction() == KeyEvent.ACTION_DOWN) {
+            mOverlayDismissable = false;
+            mHandler.removeCallbacks(mOverlayTimeout);
+            hideStatus();
+            return true;
         }
         if (mKeyboardRouter != null && mKeyboardRouter.route(event)) {
             return true;

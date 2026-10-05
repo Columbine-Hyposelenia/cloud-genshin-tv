@@ -1,5 +1,6 @@
 package com.cloudgenshin.tv;
 
+import android.os.SystemClock;
 import android.view.KeyEvent;
 
 import java.util.HashSet;
@@ -9,6 +10,9 @@ public class KeyboardRouter {
     private final VirtualMouse mMouse;
     private final Set<Integer> mKeyboardDevices = new HashSet<Integer>();
     private long mCenterDownTime;
+    private int mLastKeyCode = -1;
+    private int mLastKeyDevice = -1;
+    private long mLastKeyTime;
 
     public KeyboardRouter(VirtualMouse mouse) {
         mMouse = mouse;
@@ -17,6 +21,12 @@ public class KeyboardRouter {
     public boolean route(KeyEvent event) {
         int keyCode = event.getKeyCode();
         int deviceId = event.getDeviceId();
+
+        if (event.getAction() == KeyEvent.ACTION_DOWN) {
+            mLastKeyCode = keyCode;
+            mLastKeyDevice = deviceId;
+            mLastKeyTime = SystemClock.uptimeMillis();
+        }
 
         if (isKeyboardSignal(keyCode) && deviceId >= 0) {
             registerKeyboard(deviceId);
@@ -99,6 +109,25 @@ public class KeyboardRouter {
             return false;
         }
         return mKeyboardDevices.contains(deviceId);
+    }
+
+    public int keyboardCount() {
+        return mKeyboardDevices.size();
+    }
+
+    public int lastKeyCode() {
+        return mLastKeyCode;
+    }
+
+    public int lastKeyDevice() {
+        return mLastKeyDevice;
+    }
+
+    public long lastKeyAgeMillis() {
+        if (mLastKeyTime == 0) {
+            return -1;
+        }
+        return SystemClock.uptimeMillis() - mLastKeyTime;
     }
 
     private boolean isKeyboardSignal(int keyCode) {

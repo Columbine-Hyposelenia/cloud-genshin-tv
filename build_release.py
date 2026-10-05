@@ -7,14 +7,19 @@ import zipfile
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 HOME = os.path.dirname(ROOT)
-JAVA_HOME = os.path.join(HOME, "jdk-17.0.12+7")
+JAVA_HOME = os.path.join(HOME, "jdk-17")
 ANDROID_HOME = os.path.join(HOME, "android-sdk")
 GRADLE = os.path.join(HOME, "gradle-8.11.1", "bin", "gradle")
-BAKSMALI = os.path.join(HOME, "research", "baksmali.jar")
-SMALI = os.path.join(HOME, "research", "smali.jar")
+RESEARCH = os.path.join(HOME, "research")
 BT = os.path.join(ANDROID_HOME, "build-tools", "34.0.0")
 KEYSTORE = os.path.join(ROOT, "debug.keystore")
 WORK = os.path.join(ROOT, "build_patched")
+
+
+def smali_classpath():
+    with open(os.path.join(RESEARCH, "cp.txt")) as handle:
+        names = handle.read().strip().split(":")
+    return ":".join(os.path.join(RESEARCH, name) for name in names)
 
 PATCH1_OLD = """    iget-object p2, p0, Lorg/webrtc/AndroidVideoDecoder;->sharedContext:Lorg/webrtc/EglBase$Context;
 
@@ -86,8 +91,9 @@ def main():
 
     smali_dir = os.path.join(WORK, "smali")
     java = os.path.join(JAVA_HOME, "bin", "java")
-    run([java, "-jar", BAKSMALI, "disassemble", os.path.join(apk_dir, "classes.dex"),
-         "-o", smali_dir])
+    cp = smali_classpath()
+    run([java, "-cp", cp, "org.jf.baksmali.Main", "disassemble",
+         os.path.join(apk_dir, "classes.dex"), "-o", smali_dir])
 
     target = os.path.join(smali_dir, "org", "webrtc", "AndroidVideoDecoder.smali")
     with open(target, "r") as handle:
@@ -99,7 +105,8 @@ def main():
         handle.write(content)
 
     new_dex = os.path.join(WORK, "classes.dex")
-    run([java, "-jar", SMALI, "assemble", smali_dir, "-o", new_dex])
+    run([java, "-cp", cp, "org.jf.smali.Main", "assemble", smali_dir,
+         "-o", new_dex])
 
     shutil.copyfile(new_dex, os.path.join(apk_dir, "classes.dex"))
 

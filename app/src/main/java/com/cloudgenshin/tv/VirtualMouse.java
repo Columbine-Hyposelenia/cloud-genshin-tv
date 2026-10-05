@@ -26,6 +26,7 @@ public class VirtualMouse {
     private static final int EDGE_INTERVAL = 160;
     private static final int TICK = 16;
     private static final int CURSOR_SIZE = 32;
+    private static final int IDLE_HIDE_DELAY = 3000;
 
     private final ViewGroup mRoot;
     private final View mTarget;
@@ -53,6 +54,15 @@ public class VirtualMouse {
         }
     };
 
+    private final Runnable mHideRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (!anyHeld()) {
+                hide();
+            }
+        }
+    };
+
     public VirtualMouse(ViewGroup root, View target) {
         mRoot = root;
         mTarget = target;
@@ -63,19 +73,50 @@ public class VirtualMouse {
         params.gravity = Gravity.TOP | Gravity.LEFT;
         mCursor.setLayoutParams(params);
         mRoot.addView(mCursor);
-        mCursor.setX(root.getWidth() / 2f);
-        mCursor.setY(root.getHeight() / 2f);
         mCursor.setVisibility(View.GONE);
+
+        mRoot.addOnLayoutChangeListener(new View.OnLayoutChangeListener() {
+            @Override
+            public void onLayoutChange(View v, int left, int top, int right, int bottom,
+                    int oldLeft, int oldTop, int oldRight, int oldBottom) {
+                int w = right - left;
+                int h = bottom - top;
+                if (w > 0 && h > 0 && (w != mWidth || h != mHeight)) {
+                    updateBounds(w, h);
+                }
+            }
+        });
+        mRoot.post(new Runnable() {
+            @Override
+            public void run() {
+                int w = mRoot.getWidth();
+                int h = mRoot.getHeight();
+                if (w > 0 && h > 0 && (w != mWidth || h != mHeight)) {
+                    updateBounds(w, h);
+                }
+            }
+        });
     }
 
-    public void onLayoutReady() {
-        mWidth = mRoot.getWidth();
-        mHeight = mRoot.getHeight();
-        if (mX == 0 && mY == 0) {
+    private void updateBounds(int w, int h) {
+        boolean wasZero = mWidth <= 0 && mHeight <= 0;
+        mWidth = w;
+        mHeight = h;
+        if (wasZero && mX == 0f && mY == 0f) {
             mX = mWidth / 2f;
             mY = mHeight / 2f;
         }
+        mX = Math.max(EDGE, Math.min(mWidth - EDGE, mX));
+        mY = Math.max(EDGE, Math.min(mHeight - EDGE, mY));
         applyPosition();
+    }
+
+    public void onLayoutReady() {
+        int w = mRoot.getWidth();
+        int h = mRoot.getHeight();
+        if (w > 0 && h > 0) {
+            updateBounds(w, h);
+        }
     }
 
     public void startDirection(int dir) {
@@ -87,6 +128,7 @@ public class VirtualMouse {
             mHeld[dir] = true;
             mSpeed[dir] = 0f;
         }
+        mHandler.removeCallbacks(mHideRunnable);
         show();
         if (!wasActive) {
             mLastTick = SystemClock.uptimeMillis();
@@ -105,6 +147,7 @@ public class VirtualMouse {
         if (!anyHeld()) {
             mRunning = false;
             mHandler.removeCallbacks(mTickRunnable);
+            scheduleIdleHide();
         }
     }
 
@@ -115,6 +158,12 @@ public class VirtualMouse {
         }
         mRunning = false;
         mHandler.removeCallbacks(mTickRunnable);
+        scheduleIdleHide();
+    }
+
+    private void scheduleIdleHide() {
+        mHandler.removeCallbacks(mHideRunnable);
+        mHandler.postDelayed(mHideRunnable, IDLE_HIDE_DELAY);
     }
 
     private boolean anyHeld() {
@@ -127,6 +176,18 @@ public class VirtualMouse {
     }
 
     private void step() {
+        if (mWidth <= 0 || mHeight <= 0) {
+            int rootW = mRoot.getWidth();
+            int rootH = mRoot.getHeight();
+            if (rootW <= 0 || rootH <= 0) {
+                return;
+            }
+            updateBounds(rootW, rootH);
+            if (mWidth <= 0 || mHeight <= 0) {
+                return;
+            }
+        }
+
         long now = SystemClock.uptimeMillis();
         float dt = (now - mLastTick) / 1000f;
         mLastTick = now;
@@ -228,6 +289,7 @@ public class VirtualMouse {
     }
 
     public void click() {
+        mHandler.removeCallbacks(mHideRunnable);
         show();
         float hotSpotX = mX + dp(2);
         float hotSpotY = mY + dp(2);
@@ -235,9 +297,11 @@ public class VirtualMouse {
         dispatchTouch(downTime, downTime, MotionEvent.ACTION_DOWN, hotSpotX, hotSpotY);
         long upTime = SystemClock.uptimeMillis() + 16;
         dispatchTouch(downTime, upTime, MotionEvent.ACTION_UP, hotSpotX, hotSpotY);
+        scheduleIdleHide();
     }
 
     public void longPress() {
+        mHandler.removeCallbacks(mHideRunnable);
         show();
         float hotSpotX = mX + dp(2);
         float hotSpotY = mY + dp(2);
@@ -248,6 +312,7 @@ public class VirtualMouse {
             public void run() {
                 long upTime = SystemClock.uptimeMillis();
                 dispatchTouch(downTime, upTime, MotionEvent.ACTION_UP, hotSpotX, hotSpotY);
+                scheduleIdleHide();
             }
         }, 480);
     }
