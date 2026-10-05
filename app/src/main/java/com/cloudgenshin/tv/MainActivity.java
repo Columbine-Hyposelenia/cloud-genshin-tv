@@ -6,7 +6,6 @@ import android.app.PendingIntent;
 import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
-import android.opengl.GLES20;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -31,6 +30,9 @@ import org.mozilla.geckoview.WebNotification;
 import org.mozilla.geckoview.WebNotificationDelegate;
 import org.mozilla.geckoview.WebRequestError;
 
+import java.io.File;
+import java.io.FileOutputStream;
+
 public class MainActivity extends Activity {
     private static final String TARGET_URL = "https://ys.mihoyo.com/cloud/";
     private static final String DESKTOP_UA =
@@ -44,6 +46,7 @@ public class MainActivity extends Activity {
     private KeyboardRouter mKeyboardRouter;
     private ToolsMenu mToolsMenu;
     private DisplayFix mDisplayFix;
+    private LogServer mLogServer;
     private TextView mOverlay;
     private final Handler mHandler = new Handler(Looper.getMainLooper());
     private int mCrashCount;
@@ -59,6 +62,18 @@ public class MainActivity extends Activity {
         }
     };
 
+    private final LogServer.Source mLogSource = new LogServer.Source() {
+        @Override
+        public String report() {
+            return buildReport();
+        }
+
+        @Override
+        public String liveLog() {
+            return readLogs();
+        }
+    };
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -67,22 +82,29 @@ public class MainActivity extends Activity {
         DecoderMode.init(this);
         EngineMode.init(this);
 
+        boolean verbose = Diag.isVerbose(this);
+        if (verbose) {
+            EnvTool.applyVerboseLogging();
+        }
+        AppLog.start(this);
+
         mRoot = new FrameLayout(this);
         mRoot.setBackgroundColor(Color.BLACK);
         setContentView(mRoot);
 
-        buildEngine();
+        buildEngine(verbose);
         buildOverlay();
         buildInput();
         showStatus("正在打开云·原神…");
     }
 
-    private void buildEngine() {
+    private void buildEngine(boolean verbose) {
         GeckoRuntimeSettings runtimeSettings = new GeckoRuntimeSettings.Builder()
                 .javaScriptEnabled(true)
                 .webFontsEnabled(true)
                 .aboutConfigEnabled(true)
-                .consoleOutput(false)
+                .consoleOutput(verbose)
+                .debugLogging(verbose)
                 .contentBlocking(new ContentBlocking.Settings.Builder()
                         .antiTracking(ContentBlocking.AntiTracking.NONE)
                         .safeBrowsing(ContentBlocking.SafeBrowsing.NONE)
@@ -105,6 +127,8 @@ public class MainActivity extends Activity {
 
         mDisplayFix = new DisplayFix(mRuntime, this);
         mDisplayFix.attach();
+
+        mLogServer = LogServer.get(mLogSource);
 
         mGeckoView = new GeckoView(this);
         mGeckoView.setFocusable(true);
@@ -273,8 +297,44 @@ public class MainActivity extends Activity {
             }
 
             @Override
-            public void showDiagnostics() {
-                showDiagnosticsInfo();
+            public void showReport() {
+                openReport();
+            }
+
+            @Override
+            public String toggleLogServerLabel() {
+                return logServerLabel();
+            }
+
+            @Override
+            public String toggleLogServer() {
+                if (mLogServer.isRunning()) {
+                    mLogServer.stop();
+                } else {
+                    mLogServer.start();
+                }
+                return logServerLabel();
+            }
+
+            @Override
+            public String toggleVerbose() {
+                boolean next = !Diag.isVerbose(MainActivity.this);
+                Diag.setVerbose(MainActivity.this, next);
+                return "详细日志：" + (next ? "开启" : "关闭");
+            }
+
+            @Override
+            public void exportLogs() {
+                exportReport();
+            }
+
+            @Override
+            public void clearLogs() {
+                AppLog log = AppLog.get();
+                if (log != null) {
+                    log.clear();
+                }
+                showDismissable("日志已清空", 1500);
             }
 
             @Override
@@ -293,6 +353,105 @@ public class MainActivity extends Activity {
                 moveTaskToBack(true);
             }
         });
+    }
+
+    private String logServerLabel() {
+        if (mLogServer == null || !mLogServer.isRunning()) {
+            return "日志服务：关闭";
+        }
+        String address = mLogServer.address();
+        return "日志服务：" + (address.length() > 0 ? address : "运行中");
+    }
+
+    private void openReport() {
+        if (mDisplayFix != null) {
+            mDisplayFix.requestTelemetry();
+        }
+        showStatus("正在收集诊断信息…");
+        mHandler.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                hideStatus();
+                ReportScreen.show(MainActivity.this, buildReport());
+            }
+        }, 500);
+    }
+
+    private String buildReport() {
+        return DeviceInfo.build(this,
+                mSession != null && mSession.isOpen(),
+                mKeyboardRouter != null ? mKeyboardRouter.keyboardCount() : 0,
+                keySummary());
+    }
+
+    private String keySummary() {
+        if (mKeyboardRouter == null) {
+            return "";
+        }
+        int lastKey = mKeyboardRouter.lastKeyCode();
+        if (lastKey < 0) {
+            return "";
+        }
+        long age = mKeyboardRouter.lastKeyAgeMillis();
+        return "last key: " + KeyEvent.keyCodeToString(lastKey)
+                + " from " + mKeyboardRouter.lastKeyDevice()
+                + " (" + (age >= 0 ? age + "ms ago" : "n/a") + ")";
+    }
+
+    private String readLogs() {
+        AppLog log = AppLog.get();
+        if (log == null) {
+            return "";
+        }
+        StringBuilder builder = new StringBuilder();
+        builder.append(log.readFile(log.oldFile(), 400000));
+        builder.append(log.readFile(log.liveFile(), 600000));
+        return builder.toString();
+    }
+
+    private void exportReport() {
+        String report = buildReport();
+        String logs = readLogs();
+        StringBuilder message = new StringBuilder();
+
+        File internalDir = new File(getFilesDir(), "export");
+        if (!internalDir.exists()) {
+            internalDir.mkdirs();
+        }
+        writeFile(new File(internalDir, "report.txt"), report);
+        writeFile(new File(internalDir, "log.txt"), logs);
+        message.append("internal: ").append(internalDir.getAbsolutePath()).append('\n');
+
+        File externalDir = getExternalFilesDir(null);
+        if (externalDir != null) {
+            if (!externalDir.exists()) {
+                externalDir.mkdirs();
+            }
+            writeFile(new File(externalDir, "report.txt"), report);
+            writeFile(new File(externalDir, "log.txt"), logs);
+            message.append("external: ").append(externalDir.getAbsolutePath());
+        } else {
+            message.append("external: unavailable");
+        }
+
+        showDismissable(message.toString(), 20000);
+    }
+
+    private void writeFile(File file, String content) {
+        FileOutputStream out = null;
+        try {
+            out = new FileOutputStream(file, false);
+            out.write(content.getBytes("UTF-8"));
+            out.flush();
+        } catch (Exception ignored) {
+        } finally {
+            if (out != null) {
+                try {
+                    out.close();
+                } catch (Exception ignored) {
+                }
+            }
+        }
     }
 
     private void showStatus(final String text) {
@@ -334,53 +493,11 @@ public class MainActivity extends Activity {
         });
     }
 
-    private void showDiagnosticsInfo() {
-        StringBuilder builder = new StringBuilder();
-        builder.append("渲染后端：").append(EngineMode.backend() == EngineMode.BACKEND_SURFACE
-                ? "SurfaceView" : "TextureView").append('\n');
-        builder.append("图形模式：").append(graphicsLabel()).append('\n');
-        builder.append("亮度补偿：")
-                .append(DisplayFix.preset() == 0 ? "关闭" : DisplayFix.preset() + " 档").append('\n');
-        builder.append("硬件解码：").append(DecoderMode.hardwareDecode() ? "开启" : "关闭").append('\n');
-        builder.append("会话状态：")
-                .append(mSession != null && mSession.isOpen() ? "已打开" : "未打开").append('\n');
-        builder.append("已识别键盘：").append(mKeyboardRouter.keyboardCount()).append(" 个\n");
-        int lastKey = mKeyboardRouter.lastKeyCode();
-        if (lastKey >= 0) {
-            builder.append("最近按键：").append(KeyEvent.keyCodeToString(lastKey)).append('\n');
-            long age = mKeyboardRouter.lastKeyAgeMillis();
-            builder.append("按键来源设备：").append(mKeyboardRouter.lastKeyDevice())
-                    .append("（").append(age >= 0 ? age + "ms 前" : "无").append("）\n");
-        }
-        builder.append("GL_RENDERER：").append(glRenderer()).append('\n');
-        builder.append("目标：").append(TARGET_URL);
-        showDismissable(builder.toString(), 20000);
-    }
-
     private void showDismissable(final String text, int timeoutMs) {
         showStatus(text);
         mOverlayDismissable = true;
         mHandler.removeCallbacks(mOverlayTimeout);
         mHandler.postDelayed(mOverlayTimeout, timeoutMs);
-    }
-
-    private String graphicsLabel() {
-        int graphics = EngineMode.graphics();
-        if (graphics == EngineMode.GRAPHICS_SOFTWARE) {
-            return "软件 WebRender";
-        }
-        if (graphics == EngineMode.GRAPHICS_NO_COMPOSITOR) {
-            return "硬件（合成器关闭）";
-        }
-        return "硬件 WebRender";
-    }
-
-    private String glRenderer() {
-        try {
-            return GLES20.glGetString(GLES20.GL_RENDERER);
-        } catch (Exception e) {
-            return "未知";
-        }
     }
 
     private void restartApp() {

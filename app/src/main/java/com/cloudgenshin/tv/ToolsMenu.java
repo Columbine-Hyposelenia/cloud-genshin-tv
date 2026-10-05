@@ -21,7 +21,17 @@ public class ToolsMenu {
 
         void clearCacheAndReload();
 
-        void showDiagnostics();
+        void showReport();
+
+        String toggleLogServerLabel();
+
+        String toggleLogServer();
+
+        String toggleVerbose();
+
+        void exportLogs();
+
+        void clearLogs();
 
         void restartEngine();
 
@@ -67,6 +77,7 @@ public class ToolsMenu {
         container.setBackground(bg);
 
         addTitle(container, "工具");
+
         addHeader(container, "画面渲染（网页阶段，切换后重启）");
         addCycle(container, backendLabel(), new View.OnClickListener() {
             @Override
@@ -96,12 +107,48 @@ public class ToolsMenu {
             }
         });
 
-        addHeader(container, "解码（排队进入游戏后生效）");
+        addHeader(container, "解码（切换后重启）");
         addCycle(container, hardwareLabel(), new View.OnClickListener() {
             @Override
             public void onClick(View view) {
                 DecoderMode.setHardwareDecode(mContext, !DecoderMode.hardwareDecode());
                 ((TextView) view).setText(hardwareLabel());
+                scheduleRestart();
+            }
+        });
+
+        addHeader(container, "诊断与日志");
+        addAction(container, "诊断报告", new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                dismiss();
+                mHost.showReport();
+            }
+        });
+        addCycle(container, mHost.toggleLogServerLabel(), new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                ((TextView) view).setText(mHost.toggleLogServer());
+            }
+        });
+        addCycle(container, verboseLabel(), new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                ((TextView) view).setText(mHost.toggleVerbose());
+                scheduleRestart();
+            }
+        });
+        addAction(container, "导出诊断与日志", new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                dismiss();
+                mHost.exportLogs();
+            }
+        });
+        addAction(container, "清空日志", new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                mHost.clearLogs();
             }
         });
 
@@ -118,13 +165,6 @@ public class ToolsMenu {
             public void onClick(View view) {
                 dismiss();
                 mHost.clearCacheAndReload();
-            }
-        });
-        addAction(container, "故障诊断信息", new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                dismiss();
-                mHost.showDiagnostics();
             }
         });
         addAction(container, "重启应用", new View.OnClickListener() {
@@ -146,7 +186,7 @@ public class ToolsMenu {
         Window window = mDialog.getWindow();
         window.setBackgroundDrawableResource(android.R.color.transparent);
         WindowManager.LayoutParams params = window.getAttributes();
-        params.width = dp(440);
+        params.width = dp(460);
         params.height = WindowManager.LayoutParams.WRAP_CONTENT;
         params.gravity = Gravity.CENTER;
         window.setAttributes(params);
@@ -221,6 +261,10 @@ public class ToolsMenu {
             return "硬件解码：开启";
         }
         return "硬件解码：关闭（软件解码）";
+    }
+
+    private String verboseLabel() {
+        return "详细日志：" + (Diag.isVerbose(mContext) ? "开启" : "关闭");
     }
 
     private void addTitle(LinearLayout container, String text) {

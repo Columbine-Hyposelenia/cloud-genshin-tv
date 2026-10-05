@@ -7,6 +7,8 @@ import org.json.JSONObject;
 import org.mozilla.geckoview.GeckoRuntime;
 import org.mozilla.geckoview.WebExtension;
 
+import java.util.concurrent.CopyOnWriteArrayList;
+
 public final class DisplayFix {
     public static final int PRESET_COUNT = 6;
 
@@ -26,9 +28,12 @@ public final class DisplayFix {
     };
 
     private static volatile int sPreset;
+    private static volatile boolean sExtensionLoaded;
+    private static volatile boolean sPortConnected;
 
     private final GeckoRuntime mRuntime;
-    private WebExtension.Port mPort;
+    private final CopyOnWriteArrayList<WebExtension.Port> mPorts =
+            new CopyOnWriteArrayList<WebExtension.Port>();
 
     public DisplayFix(GeckoRuntime runtime, Context context) {
         mRuntime = runtime;
@@ -40,33 +45,70 @@ public final class DisplayFix {
         mRuntime.getWebExtensionController()
                 .ensureBuiltIn(EXT_URI, EXT_ID)
                 .accept(extension -> {
+                    sExtensionLoaded = true;
                     extension.setMessageDelegate(new WebExtension.MessageDelegate() {
                         @Override
                         public void onConnect(final WebExtension.Port port) {
-                            mPort = port;
+                            mPorts.addIfAbsent(port);
+                            sPortConnected = true;
                             port.setDelegate(new WebExtension.PortDelegate() {
                                 @Override
+                                public void onPortMessage(final Object message,
+                                        final WebExtension.Port from) {
+                                    handleMessage(message);
+                                }
+
+                                @Override
                                 public void onDisconnect(final WebExtension.Port disconnected) {
-                                    if (disconnected == mPort) {
-                                        mPort = null;
-                                    }
+                                    mPorts.remove(disconnected);
+                                    sPortConnected = !mPorts.isEmpty();
                                 }
                             });
-                            postCurrent();
+                            postToPort(port, "filter", filterFor(sPreset));
+                            postToPort(port, "report", true);
                         }
                     }, NATIVE_APP);
                 }, error -> {
+                    sExtensionLoaded = false;
                 });
     }
 
     public void setPreset(final Context context, final int preset) {
         sPreset = clamp(preset);
         persist(context);
-        postCurrent();
+        broadcastFilter();
+        requestTelemetry();
+    }
+
+    private void handleMessage(final Object message) {
+        if (!(message instanceof JSONObject)) {
+            return;
+        }
+        JSONObject json = (JSONObject) message;
+        if (!json.has("telemetry")) {
+            return;
+        }
+        JSONObject telemetry = json.optJSONObject("telemetry");
+        if (telemetry == null) {
+            return;
+        }
+        boolean isTop = telemetry.optBoolean("top", false);
+        JSONObject current = Diag.telemetry();
+        if (isTop || current == null || !current.optBoolean("top", false)) {
+            Diag.setTelemetry(telemetry);
+        }
     }
 
     public static int preset() {
         return sPreset;
+    }
+
+    public static boolean extensionLoaded() {
+        return sExtensionLoaded;
+    }
+
+    public static boolean portConnected() {
+        return sPortConnected;
     }
 
     public static String presetLabel() {
@@ -76,14 +118,23 @@ public final class DisplayFix {
         return "亮度补偿：" + sPreset + " 档";
     }
 
-    private void postCurrent() {
-        if (mPort == null) {
-            return;
+    private void broadcastFilter() {
+        for (WebExtension.Port port : mPorts) {
+            postToPort(port, "filter", filterFor(sPreset));
         }
+    }
+
+    public void requestTelemetry() {
+        for (WebExtension.Port port : mPorts) {
+            postToPort(port, "report", true);
+        }
+    }
+
+    private void postToPort(WebExtension.Port port, String key, Object value) {
         try {
             JSONObject message = new JSONObject();
-            message.put("filter", filterFor(sPreset));
-            mPort.postMessage(message);
+            message.put(key, value);
+            port.postMessage(message);
         } catch (Exception ignored) {
         }
     }
