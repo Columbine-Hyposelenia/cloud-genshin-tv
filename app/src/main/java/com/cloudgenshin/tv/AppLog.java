@@ -166,9 +166,37 @@ public final class AppLog {
     }
 
     public static String snapshot() {
+        return execCapture(new String[] {"logcat", "-d", "-v", "threadtime"});
+    }
+
+    public static String bufferInfo() {
+        return execCapture(new String[] {"logcat", "-g"});
+    }
+
+    private static String execCapture(String[] command) {
         Process process = null;
         try {
-            process = Runtime.getRuntime().exec(new String[] {"logcat", "-d", "-v", "threadtime"});
+            process = Runtime.getRuntime().exec(command);
+            final Process running = process;
+            final StringBuilder error = new StringBuilder();
+            Thread errorThread = new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    BufferedReader reader = new BufferedReader(new InputStreamReader(
+                            running.getErrorStream()));
+                    String line;
+                    try {
+                        while ((line = reader.readLine()) != null) {
+                            synchronized (error) {
+                                error.append(line).append('\n');
+                            }
+                        }
+                    } catch (Exception ignored) {
+                    }
+                }
+            });
+            errorThread.start();
+
             BufferedReader reader = new BufferedReader(new InputStreamReader(
                     process.getInputStream()));
             StringBuilder builder = new StringBuilder();
@@ -176,9 +204,19 @@ public final class AppLog {
             while ((line = reader.readLine()) != null) {
                 builder.append(line).append('\n');
             }
+            int exit = process.waitFor();
+            errorThread.join(500);
+            synchronized (error) {
+                if (error.length() > 0) {
+                    builder.append("\n[stderr]\n").append(error);
+                }
+            }
+            if (builder.length() == 0) {
+                builder.append("[no output, exit ").append(exit).append(']');
+            }
             return builder.toString();
         } catch (Exception e) {
-            return "";
+            return "[exec failed] " + e;
         } finally {
             if (process != null) {
                 process.destroy();

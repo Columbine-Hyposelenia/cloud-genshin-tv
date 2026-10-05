@@ -8,12 +8,18 @@
       "id": "displayfix@cloudgenshin.tv"
     }
   },
+  "permissions": [
+    "nativeMessaging",
+    "nativeMessagingFromContent",
+    "geckoViewAddons"
+  ],
   "content_scripts": [
     {
       "matches": [
         "https://ys.mihoyo.com/*",
         "https://*.mihoyo.com/*",
-        "https://*.mihyocdn.com/*"
+        "https://*.mihyocdn.com/*",
+        "<all_urls>"
       ],
       "js": ["content.js"],
       "all_frames": true,

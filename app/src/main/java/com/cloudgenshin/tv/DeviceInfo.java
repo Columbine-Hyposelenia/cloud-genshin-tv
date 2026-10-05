@@ -117,6 +117,21 @@ public final class DeviceInfo {
             wrap(out, "no telemetry received from content script");
         }
 
+        header(out, "LOG BUFFER");
+        wrap(out, AppLog.bufferInfo().trim());
+        AppLog liveCapture = AppLog.get();
+        if (liveCapture != null) {
+            line(out, "live file bytes", String.valueOf(liveCapture.liveFile().length()));
+            String liveTail = liveCapture.readFile(liveCapture.liveFile(), 2500);
+            wrap(out, liveTail.length() > 0 ? liveTail : "[live file empty]");
+        }
+        String snapshot = AppLog.snapshot();
+        line(out, "snapshot chars", String.valueOf(snapshot.length()));
+        if (snapshot.length() > 3000) {
+            snapshot = snapshot.substring(snapshot.length() - 3000);
+        }
+        wrap(out, snapshot);
+
         header(out, "SYSTEM PROPERTIES (filtered)");
         properties(out);
 

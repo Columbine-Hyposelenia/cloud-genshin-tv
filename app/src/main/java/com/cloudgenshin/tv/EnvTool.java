@@ -1,5 +1,6 @@
 package com.cloudgenshin.tv;
 
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Map;
@@ -33,7 +34,8 @@ public final class EnvTool {
         }
         sApplied = true;
         sSucceeded = setViaNative("MOZ_LOG", LOG_MODULES)
-                || setViaMap("MOZ_LOG", LOG_MODULES);
+                || setViaMap("MOZ_LOG", LOG_MODULES)
+                || setViaInner("MOZ_LOG", LOG_MODULES);
     }
 
     public static boolean succeeded() {
@@ -77,6 +79,21 @@ public final class EnvTool {
                 return false;
             }
             environment.put(key, value);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private static boolean setViaInner(String key, String value) {
+        try {
+            Class<?> inner = Class.forName("java.lang.ProcessEnvironment$StringEnvironment");
+            Constructor<?> constructor = inner.getDeclaredConstructor();
+            constructor.setAccessible(true);
+            Object mapObject = constructor.newInstance();
+            Method put = inner.getDeclaredMethod("put", Object.class, Object.class);
+            put.setAccessible(true);
+            put.invoke(mapObject, key, value);
             return true;
         } catch (Exception e) {
             return false;

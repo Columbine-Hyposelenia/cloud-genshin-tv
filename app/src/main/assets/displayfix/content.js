@@ -13,6 +13,8 @@
   let filterApplied = false;
   let sampleCanvas = null;
   let sampleCtx = null;
+  let fixStyle = null;
+  let ancestorEl = null;
 
   function connect() {
     try {
@@ -105,7 +107,54 @@
         applied = true;
       }
     }
+    if (applyFullscreenAncestor()) {
+      applied = true;
+    }
+    updateStyle();
     filterApplied = applied;
+  }
+
+  function applyFullscreenAncestor() {
+    const fs = document.fullscreenElement;
+    if (!fs || fs.tagName === "VIDEO" || fs.tagName === "CANVAS") {
+      clearAncestor();
+      return false;
+    }
+    if (ancestorEl && ancestorEl !== fs) {
+      clearAncestor();
+    }
+    ancestorEl = fs;
+    if (filterText) {
+      fs.style.filter = filterText;
+      return true;
+    }
+    return false;
+  }
+
+  function clearAncestor() {
+    if (ancestorEl) {
+      ancestorEl.style.filter = "";
+      ancestorEl = null;
+    }
+  }
+
+  function ensureFixStyle() {
+    if (!fixStyle || !fixStyle.parentNode) {
+      fixStyle = document.createElement("style");
+      fixStyle.id = "__displayFixStyle";
+      const root = document.head || document.documentElement;
+      root.appendChild(fixStyle);
+    }
+    return fixStyle;
+  }
+
+  function updateStyle() {
+    const style = ensureFixStyle();
+    style.textContent = filterText
+      ? (":fullscreen, :fullscreen video, :fullscreen canvas, "
+         + "video:fullscreen, canvas:fullscreen { filter: "
+         + filterText + " !important; }")
+      : "";
   }
 
   function schedule() {
