@@ -43,6 +43,7 @@ public class MainActivity extends Activity {
     private VirtualMouse mVirtualMouse;
     private KeyboardRouter mKeyboardRouter;
     private ToolsMenu mToolsMenu;
+    private DisplayFix mDisplayFix;
     private TextView mOverlay;
     private final Handler mHandler = new Handler(Looper.getMainLooper());
     private int mCrashCount;
@@ -101,6 +102,9 @@ public class MainActivity extends Activity {
                 notification.dismiss();
             }
         });
+
+        mDisplayFix = new DisplayFix(mRuntime, this);
+        mDisplayFix.attach();
 
         mGeckoView = new GeckoView(this);
         mGeckoView.setFocusable(true);
@@ -279,6 +283,12 @@ public class MainActivity extends Activity {
             }
 
             @Override
+            public void cycleBrightness() {
+                int next = (DisplayFix.preset() + 1) % DisplayFix.PRESET_COUNT;
+                mDisplayFix.setPreset(MainActivity.this, next);
+            }
+
+            @Override
             public void exitApp() {
                 moveTaskToBack(true);
             }
@@ -329,7 +339,8 @@ public class MainActivity extends Activity {
         builder.append("渲染后端：").append(EngineMode.backend() == EngineMode.BACKEND_SURFACE
                 ? "SurfaceView" : "TextureView").append('\n');
         builder.append("图形模式：").append(graphicsLabel()).append('\n');
-        builder.append("解码输出：").append(DecoderMode.isByteBuffer() ? "字节缓冲" : "纹理").append('\n');
+        builder.append("亮度补偿：")
+                .append(DisplayFix.preset() == 0 ? "关闭" : DisplayFix.preset() + " 档").append('\n');
         builder.append("硬件解码：").append(DecoderMode.hardwareDecode() ? "开启" : "关闭").append('\n');
         builder.append("会话状态：")
                 .append(mSession != null && mSession.isOpen() ? "已打开" : "未打开").append('\n');

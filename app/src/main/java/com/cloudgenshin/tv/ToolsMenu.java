@@ -25,6 +25,8 @@ public class ToolsMenu {
 
         void restartEngine();
 
+        void cycleBrightness();
+
         void exitApp();
     }
 
@@ -85,16 +87,16 @@ public class ToolsMenu {
             }
         });
 
-        addHeader(container, "解码（排队进入游戏后生效）");
-        addCycle(container, outputLabel(), new View.OnClickListener() {
+        addHeader(container, "画面（游戏中即时生效）");
+        addCycle(container, DisplayFix.presetLabel(), new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                int next = DecoderMode.isByteBuffer()
-                        ? DecoderMode.OUTPUT_TEXTURE : DecoderMode.OUTPUT_BYTEBUFFER;
-                DecoderMode.setOutput(mContext, next);
-                ((TextView) view).setText(outputLabel());
+                mHost.cycleBrightness();
+                ((TextView) view).setText(DisplayFix.presetLabel());
             }
         });
+
+        addHeader(container, "解码（排队进入游戏后生效）");
         addCycle(container, hardwareLabel(), new View.OnClickListener() {
             @Override
             public void onClick(View view) {
@@ -212,13 +214,6 @@ public class ToolsMenu {
             return "图形模式：硬件·合成器关闭";
         }
         return "图形模式：硬件 WebRender（默认）";
-    }
-
-    private String outputLabel() {
-        if (DecoderMode.isByteBuffer()) {
-            return "解码输出：字节缓冲（推荐）";
-        }
-        return "解码输出：纹理";
     }
 
     private String hardwareLabel() {
