@@ -8,6 +8,9 @@
       "id": "displayfix@cloudgenshin.tv"
     }
   },
+  "background": {
+    "scripts": ["background.js"]
+  },
   "permissions": [
     "nativeMessaging",
     "nativeMessagingFromContent",

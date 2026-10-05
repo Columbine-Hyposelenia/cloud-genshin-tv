@@ -41,7 +41,7 @@ public final class DisplayFix {
                 .getInt(KEY_PRESET, 0));
     }
 
-    public void attach() {
+    public void start(final Runnable onReady) {
         mRuntime.getWebExtensionController()
                 .ensureBuiltIn(EXT_URI, EXT_ID)
                 .accept(extension -> {
@@ -68,8 +68,10 @@ public final class DisplayFix {
                             postToPort(port, "report", true);
                         }
                     }, NATIVE_APP);
+                    onReady.run();
                 }, error -> {
                     sExtensionLoaded = false;
+                    onReady.run();
                 });
     }
 

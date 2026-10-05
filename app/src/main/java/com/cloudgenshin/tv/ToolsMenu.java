@@ -13,6 +13,7 @@ import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 
 public class ToolsMenu {
@@ -34,6 +35,8 @@ public class ToolsMenu {
         void clearLogs();
 
         void restartEngine();
+
+        void resetDisplay();
 
         void cycleBrightness();
 
@@ -104,6 +107,13 @@ public class ToolsMenu {
             public void onClick(View view) {
                 mHost.cycleBrightness();
                 ((TextView) view).setText(DisplayFix.presetLabel());
+            }
+        });
+        addAction(container, "重置画面（不掉线）", new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                dismiss();
+                mHost.resetDisplay();
             }
         });
 
@@ -182,12 +192,14 @@ public class ToolsMenu {
             }
         });
 
-        mDialog.setContentView(container);
+        ScrollView scrollView = new ScrollView(mContext);
+        scrollView.addView(container);
+        mDialog.setContentView(scrollView);
         Window window = mDialog.getWindow();
         window.setBackgroundDrawableResource(android.R.color.transparent);
         WindowManager.LayoutParams params = window.getAttributes();
         params.width = dp(460);
-        params.height = WindowManager.LayoutParams.WRAP_CONTENT;
+        params.height = (int) (mContext.getResources().getDisplayMetrics().heightPixels * 0.88f);
         params.gravity = Gravity.CENTER;
         window.setAttributes(params);
 
