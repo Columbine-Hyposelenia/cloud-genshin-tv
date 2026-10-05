@@ -33,6 +33,12 @@ public final class EnginePrefs {
         prefs.put("webgl.enable-webgl2", true);
         prefs.put("webgl.force-enabled", true);
 
+        int graphics = EngineMode.graphics();
+        prefs.put("gfx.webrender.software", graphics == EngineMode.GRAPHICS_SOFTWARE);
+        if (graphics == EngineMode.GRAPHICS_NO_COMPOSITOR) {
+            prefs.put("gfx.webrender.compositor", false);
+        }
+
         prefs.put("gfx.color_management.mode", 2);
         prefs.put("gfx.color_management.enablev4", true);
 

@@ -5,6 +5,8 @@ import android.content.Context;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
@@ -21,6 +23,8 @@ public class ToolsMenu {
 
         void showDiagnostics();
 
+        void restartEngine();
+
         void exitApp();
     }
 
@@ -28,9 +32,11 @@ public class ToolsMenu {
     private static final int ROW_BG = 0xFF1B2740;
     private static final int ROW_FOCUS = 0xFF3D63B0;
     private static final int TEXT = 0xFFEAF0FB;
+    private static final int HEADER = 0xFF8FB0E6;
 
     private final Context mContext;
     private final Host mHost;
+    private final Handler mHandler = new Handler(Looper.getMainLooper());
     private Dialog mDialog;
 
     public ToolsMenu(Context context, Host host) {
@@ -58,24 +64,46 @@ public class ToolsMenu {
         bg.setCornerRadius(dp(10));
         container.setBackground(bg);
 
-        addTitle(container);
-        addToggle(container, outputLabel(), new View.OnClickListener() {
+        addTitle(container, "工具");
+        addHeader(container, "画面渲染（网页阶段，切换后重启）");
+        addCycle(container, backendLabel(), new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                int next = EngineMode.backend() == EngineMode.BACKEND_TEXTURE
+                        ? EngineMode.BACKEND_SURFACE : EngineMode.BACKEND_TEXTURE;
+                EngineMode.setBackend(mContext, next);
+                ((TextView) view).setText(backendLabel());
+                scheduleRestart();
+            }
+        });
+        addCycle(container, graphicsLabel(), new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                EngineMode.setGraphics(mContext, nextGraphics());
+                ((TextView) view).setText(graphicsLabel());
+                scheduleRestart();
+            }
+        });
+
+        addHeader(container, "解码（排队进入游戏后生效）");
+        addCycle(container, outputLabel(), new View.OnClickListener() {
             @Override
             public void onClick(View view) {
                 int next = DecoderMode.isByteBuffer()
-                        ? DecoderMode.OUTPUT_TEXTURE
-                        : DecoderMode.OUTPUT_BYTEBUFFER;
+                        ? DecoderMode.OUTPUT_TEXTURE : DecoderMode.OUTPUT_BYTEBUFFER;
                 DecoderMode.setOutput(mContext, next);
                 ((TextView) view).setText(outputLabel());
             }
         });
-        addToggle(container, hardwareLabel(), new View.OnClickListener() {
+        addCycle(container, hardwareLabel(), new View.OnClickListener() {
             @Override
             public void onClick(View view) {
                 DecoderMode.setHardwareDecode(mContext, !DecoderMode.hardwareDecode());
                 ((TextView) view).setText(hardwareLabel());
             }
         });
+
+        addHeader(container, "操作");
         addAction(container, "重新加载页面", new View.OnClickListener() {
             @Override
             public void onClick(View view) {
@@ -97,6 +125,13 @@ public class ToolsMenu {
                 mHost.showDiagnostics();
             }
         });
+        addAction(container, "重启应用", new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                dismiss();
+                mHost.restartEngine();
+            }
+        });
         addAction(container, "退出应用", new View.OnClickListener() {
             @Override
             public void onClick(View view) {
@@ -109,7 +144,7 @@ public class ToolsMenu {
         Window window = mDialog.getWindow();
         window.setBackgroundDrawableResource(android.R.color.transparent);
         WindowManager.LayoutParams params = window.getAttributes();
-        params.width = dp(420);
+        params.width = dp(440);
         params.height = WindowManager.LayoutParams.WRAP_CONTENT;
         params.gravity = Gravity.CENTER;
         window.setAttributes(params);
@@ -130,16 +165,53 @@ public class ToolsMenu {
         });
 
         mDialog.show();
-        View first = container.getChildAt(1);
-        if (first != null) {
-            first.requestFocus();
+        View focused = container.getChildAt(2);
+        if (focused != null) {
+            focused.requestFocus();
         }
+    }
+
+    private void scheduleRestart() {
+        mHandler.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                dismiss();
+                mHost.restartEngine();
+            }
+        }, 650);
+    }
+
+    private int nextGraphics() {
+        int current = EngineMode.graphics();
+        if (current == EngineMode.GRAPHICS_HARDWARE) {
+            return EngineMode.GRAPHICS_SOFTWARE;
+        }
+        if (current == EngineMode.GRAPHICS_SOFTWARE) {
+            return EngineMode.GRAPHICS_NO_COMPOSITOR;
+        }
+        return EngineMode.GRAPHICS_HARDWARE;
     }
 
     public void dismiss() {
         if (mDialog != null && mDialog.isShowing()) {
             mDialog.dismiss();
         }
+    }
+
+    private String backendLabel() {
+        return "渲染后端：" + (EngineMode.backend() == EngineMode.BACKEND_SURFACE
+                ? "SurfaceView" : "TextureView（默认）");
+    }
+
+    private String graphicsLabel() {
+        int graphics = EngineMode.graphics();
+        if (graphics == EngineMode.GRAPHICS_SOFTWARE) {
+            return "图形模式：软件 WebRender";
+        }
+        if (graphics == EngineMode.GRAPHICS_NO_COMPOSITOR) {
+            return "图形模式：硬件·合成器关闭";
+        }
+        return "图形模式：硬件 WebRender（默认）";
     }
 
     private String outputLabel() {
@@ -156,17 +228,20 @@ public class ToolsMenu {
         return "硬件解码：关闭（软件解码）";
     }
 
-    private void addTitle(LinearLayout container) {
-        TextView title = new TextView(mContext);
-        title.setText("工具");
-        title.setTextColor(TEXT);
-        title.setTextSize(20);
+    private void addTitle(LinearLayout container, String text) {
+        TextView title = baseText(text, 20, TEXT);
         title.setTypeface(Typeface.DEFAULT_BOLD);
-        title.setPadding(dp(8), 0, dp(8), dp(14));
+        title.setPadding(dp(8), 0, dp(8), dp(12));
         container.addView(title);
     }
 
-    private void addToggle(LinearLayout container, String label, View.OnClickListener listener) {
+    private void addHeader(LinearLayout container, String text) {
+        TextView header = baseText(text, 13, HEADER);
+        header.setPadding(dp(8), dp(6), dp(8), dp(6));
+        container.addView(header);
+    }
+
+    private void addCycle(LinearLayout container, String label, View.OnClickListener listener) {
         TextView row = baseRow();
         row.setText(label);
         attachFocusStyle(row);
@@ -182,14 +257,20 @@ public class ToolsMenu {
         container.addView(row);
     }
 
+    private TextView baseText(String text, int size, int color) {
+        TextView view = new TextView(mContext);
+        view.setText(text);
+        view.setTextColor(color);
+        view.setTextSize(size);
+        return view;
+    }
+
     private TextView baseRow() {
         TextView row = new TextView(mContext);
         row.setTextColor(TEXT);
         row.setTextSize(16);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        int vertical = dp(13);
-        int horizontal = dp(14);
-        row.setPadding(horizontal, vertical, horizontal, vertical);
+        row.setPadding(dp(14), dp(13), dp(14), dp(13));
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         params.bottomMargin = dp(10);

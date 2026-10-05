@@ -105,14 +105,50 @@ public class KeyboardRouter {
         if (keyCode >= KeyEvent.KEYCODE_A && keyCode <= KeyEvent.KEYCODE_Z) {
             return true;
         }
-        return keyCode == KeyEvent.KEYCODE_CTRL_LEFT
-                || keyCode == KeyEvent.KEYCODE_CTRL_RIGHT
-                || keyCode == KeyEvent.KEYCODE_ALT_LEFT
-                || keyCode == KeyEvent.KEYCODE_ALT_RIGHT
-                || keyCode == KeyEvent.KEYCODE_SHIFT_LEFT
-                || keyCode == KeyEvent.KEYCODE_SHIFT_RIGHT
-                || keyCode == KeyEvent.KEYCODE_TAB
-                || keyCode == KeyEvent.KEYCODE_CAPS_LOCK;
+        if (keyCode >= KeyEvent.KEYCODE_0 && keyCode <= KeyEvent.KEYCODE_9) {
+            return true;
+        }
+        if (keyCode >= KeyEvent.KEYCODE_F1 && keyCode <= KeyEvent.KEYCODE_F12) {
+            return true;
+        }
+        if (keyCode >= KeyEvent.KEYCODE_NUMPAD_0 && keyCode <= KeyEvent.KEYCODE_NUMPAD_9) {
+            return true;
+        }
+        switch (keyCode) {
+            case KeyEvent.KEYCODE_SPACE:
+            case KeyEvent.KEYCODE_ESCAPE:
+            case KeyEvent.KEYCODE_TAB:
+            case KeyEvent.KEYCODE_DEL:
+            case KeyEvent.KEYCODE_FORWARD_DEL:
+            case KeyEvent.KEYCODE_INSERT:
+            case KeyEvent.KEYCODE_MOVE_HOME:
+            case KeyEvent.KEYCODE_MOVE_END:
+            case KeyEvent.KEYCODE_PAGE_UP:
+            case KeyEvent.KEYCODE_PAGE_DOWN:
+            case KeyEvent.KEYCODE_CAPS_LOCK:
+            case KeyEvent.KEYCODE_SCROLL_LOCK:
+            case KeyEvent.KEYCODE_NUM_LOCK:
+            case KeyEvent.KEYCODE_CTRL_LEFT:
+            case KeyEvent.KEYCODE_CTRL_RIGHT:
+            case KeyEvent.KEYCODE_ALT_LEFT:
+            case KeyEvent.KEYCODE_ALT_RIGHT:
+            case KeyEvent.KEYCODE_SHIFT_LEFT:
+            case KeyEvent.KEYCODE_SHIFT_RIGHT:
+            case KeyEvent.KEYCODE_MINUS:
+            case KeyEvent.KEYCODE_EQUALS:
+            case KeyEvent.KEYCODE_LEFT_BRACKET:
+            case KeyEvent.KEYCODE_RIGHT_BRACKET:
+            case KeyEvent.KEYCODE_BACKSLASH:
+            case KeyEvent.KEYCODE_SEMICOLON:
+            case KeyEvent.KEYCODE_APOSTROPHE:
+            case KeyEvent.KEYCODE_GRAVE:
+            case KeyEvent.KEYCODE_COMMA:
+            case KeyEvent.KEYCODE_PERIOD:
+            case KeyEvent.KEYCODE_SLASH:
+                return true;
+            default:
+                return false;
+        }
     }
 
     private boolean isDpadDirection(int keyCode) {
