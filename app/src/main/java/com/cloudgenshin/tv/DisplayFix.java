@@ -13,6 +13,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 public final class DisplayFix {
     public static final int PRESET_COUNT = 6;
     public static final int GEOMETRY_COUNT = 12;
+    public static final int REVEAL_COUNT = 5;
 
     private static final String EXT_ID = "displayfix@cloudgenshin.tv";
     private static final String NATIVE_APP = "displayfix";
@@ -39,7 +40,7 @@ public final class DisplayFix {
 
     private static volatile int sPreset;
     private static volatile int sGeometry;
-    private static volatile boolean sReveal;
+    private static volatile int sRevealMode;
     private static volatile boolean sExtensionLoaded;
     private static volatile boolean sPortConnected;
 
@@ -78,7 +79,7 @@ public final class DisplayFix {
                 context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         sPreset = clamp(prefs.getInt(KEY_PRESET, 0), PRESET_COUNT);
         sGeometry = clamp(prefs.getInt(KEY_GEOMETRY, 0), GEOMETRY_COUNT);
-        sReveal = prefs.getBoolean(KEY_REVEAL, false);
+        sRevealMode = clamp(prefs.getInt(KEY_REVEAL, 0), REVEAL_COUNT);
     }
 
     public void start(final Runnable onReady) {
@@ -121,7 +122,7 @@ public final class DisplayFix {
     }
 
     public void cycleReveal(final Context context) {
-        sReveal = !sReveal;
+        sRevealMode = sRevealMode + 1 >= REVEAL_COUNT ? 0 : sRevealMode + 1;
         persist(context);
         broadcastState();
         requestTelemetry();
@@ -182,12 +183,23 @@ public final class DisplayFix {
         return "画面缩放：×" + formatScale(GEOMETRY_SCALES[sGeometry]);
     }
 
-    public static boolean reveal() {
-        return sReveal;
+    public static int revealMode() {
+        return sRevealMode;
     }
 
     public static String revealLabel() {
-        return sReveal ? "底层画面：露出" : "底层画面：遮蔽";
+        switch (sRevealMode) {
+            case 1:
+                return "底层画面：透明（瞬现）";
+            case 2:
+                return "底层画面：视频层移出";
+            case 3:
+                return "底层画面：视频缩角落";
+            case 4:
+                return "底层画面：视频隐藏";
+            default:
+                return "底层画面：遮蔽";
+        }
     }
 
     private void broadcastState() {
@@ -201,7 +213,7 @@ public final class DisplayFix {
             JSONObject message = new JSONObject();
             message.put("filter", filterFor(sPreset));
             message.put("geometry", geometryFor(sGeometry));
-            message.put("reveal", sReveal);
+            message.put("revealMode", sRevealMode);
             port.postMessage(message);
         } catch (Exception ignored) {
         }
@@ -265,7 +277,7 @@ public final class DisplayFix {
         prefs.edit()
                 .putInt(KEY_PRESET, sPreset)
                 .putInt(KEY_GEOMETRY, sGeometry)
-                .putBoolean(KEY_REVEAL, sReveal)
+                .putInt(KEY_REVEAL, sRevealMode)
                 .apply();
     }
 }

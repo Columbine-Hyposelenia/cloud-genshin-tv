@@ -374,7 +374,7 @@ public class MainActivity extends Activity {
             @Override
             public void toggleReveal() {
                 mDisplayFix.cycleReveal(MainActivity.this);
-                applyNativeTransparency(DisplayFix.reveal());
+                applyNativeTransparency(DisplayFix.revealMode() > 0);
             }
 
             @Override

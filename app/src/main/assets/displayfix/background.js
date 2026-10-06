@@ -4,7 +4,7 @@ const NATIVE_APP = "displayfix";
 let nativePort = null;
 let currentFilter = "";
 let currentGeometry = "";
-let currentReveal = false;
+let currentRevealMode = 0;
 
 function connectNative() {
   try {
@@ -21,8 +21,8 @@ function connectNative() {
         currentGeometry = msg.geometry;
         applyFilter();
       }
-      if (typeof msg.reveal === "boolean") {
-        currentReveal = msg.reveal;
+      if (typeof msg.revealMode === "number") {
+        currentRevealMode = msg.revealMode;
         applyFilter();
       }
       if (msg.reattach) {
@@ -56,7 +56,7 @@ async function activeTabId() {
   return null;
 }
 
-function pageApply(filter, geometry, reveal) {
+function pageApply(filter, geometry, revealMode) {
   const MARK_FILTER = "__displayFixFilter";
   const MARK_GEOMETRY = "__displayFixGeometry";
   const MARK_REVEAL = "__displayFixReveal";
@@ -146,11 +146,28 @@ function pageApply(filter, geometry, reveal) {
   }
 
   let revealStyle = document.getElementById(REVEAL_STYLE_ID);
-  if (reveal) {
-    const mainVideo = media.length ? media[0] : document.querySelector("video");
+  const mainVideo = media.length ? media[0] : document.querySelector("video");
+  if (revealMode > 0) {
     if (mainVideo) {
-      mainVideo.style.opacity = "0";
       mainVideo[MARK_REVEAL] = true;
+      if (revealMode === 1) {
+        mainVideo.style.opacity = "0";
+      } else if (revealMode === 2) {
+        mainVideo.style.position = "fixed";
+        mainVideo.style.left = "0";
+        mainVideo.style.top = "0";
+        mainVideo.style.margin = "0";
+        mainVideo.style.transform = "translateX(-1500px)";
+      } else if (revealMode === 3) {
+        mainVideo.style.position = "fixed";
+        mainVideo.style.left = "0";
+        mainVideo.style.top = "0";
+        mainVideo.style.margin = "0";
+        mainVideo.style.width = "2px";
+        mainVideo.style.height = "2px";
+      } else if (revealMode === 4) {
+        mainVideo.style.display = "none";
+      }
     }
     if (!revealStyle) {
       revealStyle = document.createElement("style");
@@ -165,12 +182,25 @@ function pageApply(filter, geometry, reveal) {
     for (const el of media) {
       if (el[MARK_REVEAL]) {
         el.style.opacity = "";
+        el.style.position = "";
+        el.style.left = "";
+        el.style.top = "";
+        el.style.margin = "";
+        el.style.transform = "";
+        el.style.width = "";
+        el.style.height = "";
+        el.style.display = "";
         el[MARK_REVEAL] = false;
       }
     }
   }
 
-  return { url: location.href, count: media.length, applied: applied, reveal: reveal };
+  return {
+    url: location.href,
+    count: media.length,
+    applied: applied,
+    revealMode: revealMode
+  };
 }
 
 function pageReattach() {
@@ -366,7 +396,7 @@ function postNative(obj) {
 
 async function applyFilter() {
   try {
-    await runInPage(pageApply, currentFilter, currentGeometry, currentReveal);
+    await runInPage(pageApply, currentFilter, currentGeometry, currentRevealMode);
   } catch (e) {
     postNative({ injectError: String(e) });
   }
