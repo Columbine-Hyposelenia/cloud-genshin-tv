@@ -42,6 +42,7 @@ public class MainActivity extends Activity {
 
     private FrameLayout mRoot;
     private GeckoView mGeckoView;
+    private HoleSurfaceView mHole;
     private GeckoRuntime mRuntime;
     private GeckoSession mSession;
     private VirtualMouse mVirtualMouse;
@@ -137,6 +138,10 @@ public class MainActivity extends Activity {
                 : GeckoView.BACKEND_TEXTURE_VIEW);
         mGeckoView.coverUntilFirstPaint(Color.BLACK);
         mRoot.addView(mGeckoView, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        mHole = new HoleSurfaceView(this);
+        mRoot.addView(mHole, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
         mDisplayFix = new DisplayFix(mRuntime, this);
@@ -394,6 +399,9 @@ public class MainActivity extends Activity {
                 }
                 if (mGeckoView != null) {
                     mGeckoView.setBackgroundColor(color);
+                }
+                if (mHole != null) {
+                    mHole.setVisibility(transparent ? View.VISIBLE : View.GONE);
                 }
                 getWindow().setBackgroundDrawable(
                         new ColorDrawable(transparent ? Color.TRANSPARENT : Color.BLACK));

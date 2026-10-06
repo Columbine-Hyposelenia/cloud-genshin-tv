@@ -197,9 +197,17 @@ git -c http.extraheader="Authorization: Basic $(printf 'x-access-token:%s' <TOKE
 
 非 0 档都会同时：原生 View 透明、窗口背景透明、窗口格式 TRANSLUCENT。回 0 档全部还原（opacity/position/left/top/margin/transform/width/height/display 逐个清空）。
 
-【待设备验证】逐档切换，报告哪一档让全屏画面**持续**以正常亮度显示且操控/网络会话正常：
-- 若某档稳定成功：问题解决，后续进入游戏后自动应用该档。
-- 若 2/3/4 都不稳定：下一方向是 **SurfaceView 后端 + `gatherTransparentRegion` 稳定打孔**（SurfaceFlinger 持续维护的孔，区别于仅在 relayout 瞬现的窗口半透明）；此前“SurfaceView 本机不渲染”的结论需在硬件平面视角下重新评估。
+**二次收窄【确认】**：实测档 2/3/4（纯页面 CSS：移出/缩角/隐藏）**不产生全屏显现**；只有 0↔1 切换（即原生 `Window.setFormat` OPAQUE↔TRANSLUCENT 触发的**窗口表面重建**）才在过渡帧显现。结论：变亮由**窗口表面 relayout 的空档**产生，页面 CSS 改动无法稳定移除覆盖。
+
+**稳定打孔（本轮新增，`HoleSurfaceView`）**：为把“一瞬的空档”变成“持续的透明”，新增一个全屏、`PixelFormat.TRANSLUCENT` 的 SurfaceView（`HoleSurfaceView.java`），在任意非 0 档 `setVisibility(VISIBLE)`。它通过 `gatherTransparentRegion` 在宿主窗口上**持续**打一个全屏透明孔（SurfaceFlinger 每帧维护，而非 relayout 那一帧），自身表面用 `lockCanvas` + CLEAR 清成全透明且不绘任何不透明内容，使窗口后方的 amvideo 硬件平面透过该孔持续显示。回 0 档 GONE，孔关闭。这是与“仅 relayout 瞬现”相对的标准机制，为本轮首要验证项。
+
+**关于“调换层级 / 让游戏画面盖住遮罩”（用户设想）的可行性分析**：Android 中对 SurfaceView 表面可用 `setZOrderOnTop(true)`（置于宿主窗口之上）或 `setZOrderMediaOverlay(true)`（置于其它 SurfaceView 之上、窗口之下）调整 z 序。若解码器输出挂在我们持有的 SurfaceView 上，可把它抬到 GUI 之上实现“画面盖住遮罩”。但本机 Gecko 用 SurfaceTexture 承载解码器输出，amvideo 平面由 HAL/解码器管理，普通应用无法直接对其调 z 序，故该设想**当前不可直接实施**；若后续把解码输出改挂到自有 SurfaceView，则 `setZOrderOnTop` 是一条等价于“移除遮罩”的可行路线，记录备查。
+
+**关于“SurfaceView 后端不渲染”**：GeckoView 的 BACKEND_SURFACE 是把**整个 Gecko 合成页面**放进一个 SurfaceView 表面，解码器仍输出到 Gecko 内部 SurfaceTexture，因此它并不会为 amvideo 平面自动打孔；此前“本机不渲染”可能是该后端在本机 EGL/驱动上真的失败，也可能是“渲染了但被平面/孔遮挡”。鉴于 HoleSurfaceView 已独立实现打孔，无需依赖切换 GeckoView 后端即可验证。
+
+【待设备验证】进入游戏极暗状态后切到档 1（触发窗口 relayout 并同时启用 HoleSurfaceView 全屏孔），重点观察：闪光后画面是否**持续保持正常亮度**（而非回到极暗），操控/声音是否正常：
+- 若持续成功：问题解决，后续进入游戏后自动应用档 1。
+- 若闪光后仍回到极暗：说明 amvideo 平面与应用 SurfaceView 表面的 z 序不满足透出条件，下一步尝试对 HoleSurfaceView `setZOrderMediaOverlay` / 调整其表面格式，或把解码输出改挂自有 SurfaceView 并 `setZOrderOnTop`。
 - 其他可考虑的在线动作：在线切换 `media.hardware-video-decoding.enabled`（Gecko 中为 `RelaxedAtomicBool`，可实时生效），迫使解码器/sink 重建而不重协商 WebRTC、不重载页面。
 
 ---
