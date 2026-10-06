@@ -12,12 +12,14 @@ import java.util.concurrent.CopyOnWriteArrayList;
 
 public final class DisplayFix {
     public static final int PRESET_COUNT = 6;
+    public static final int GEOMETRY_COUNT = 12;
 
     private static final String EXT_ID = "displayfix@cloudgenshin.tv";
     private static final String NATIVE_APP = "displayfix";
     private static final String EXT_URI = "resource://android/assets/displayfix/";
     private static final String PREFS_NAME = "display_fix";
     private static final String KEY_PRESET = "preset";
+    private static final String KEY_GEOMETRY = "geometry";
 
     private static final float[][] PRESETS = {
             null,
@@ -28,7 +30,14 @@ public final class DisplayFix {
             {4.5f, 1.08f}
     };
 
+    private static final float[] GEOMETRY_SCALES = {
+            0f,
+            1.5f, 2.0f, 2.5f, 3.0f, 4.0f,
+            5.0f, 6.0f, 8.0f, 10.0f, 12.0f, 16.0f
+    };
+
     private static volatile int sPreset;
+    private static volatile int sGeometry;
     private static volatile boolean sExtensionLoaded;
     private static volatile boolean sPortConnected;
 
@@ -56,15 +65,17 @@ public final class DisplayFix {
                             sPortConnected = !mPorts.isEmpty();
                         }
                     });
-                    postToPort(port, "filter", filterFor(sPreset));
+                    broadcastState(port);
                     postToPort(port, "report", true);
                 }
             };
 
     public DisplayFix(GeckoRuntime runtime, Context context) {
         mRuntime = runtime;
-        sPreset = clamp(context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                .getInt(KEY_PRESET, 0));
+        SharedPreferences prefs =
+                context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        sPreset = clamp(prefs.getInt(KEY_PRESET, 0), PRESET_COUNT);
+        sGeometry = clamp(prefs.getInt(KEY_GEOMETRY, 0), GEOMETRY_COUNT);
     }
 
     public void start(final Runnable onReady) {
@@ -89,9 +100,30 @@ public final class DisplayFix {
     }
 
     public void setPreset(final Context context, final int preset) {
-        sPreset = clamp(preset);
+        sPreset = clamp(preset, PRESET_COUNT);
         persist(context);
-        broadcastFilter();
+        broadcastState();
+        requestTelemetry();
+    }
+
+    public void cyclePreset(final Context context) {
+        setPreset(context, sPreset + 1 >= PRESET_COUNT ? 0 : sPreset + 1);
+    }
+
+    public void cycleGeometry(final Context context) {
+        sGeometry = sGeometry + 1 >= GEOMETRY_COUNT ? 0 : sGeometry + 1;
+        persist(context);
+        broadcastState();
+        requestTelemetry();
+    }
+
+    public void reattachVideo() {
+        broadcast("reattach", true);
+        requestTelemetry();
+    }
+
+    public void replaceVideo() {
+        broadcast("replace", true);
         requestTelemetry();
     }
 
@@ -133,9 +165,32 @@ public final class DisplayFix {
         return "亮度补偿：" + sPreset + " 档";
     }
 
-    private void broadcastFilter() {
+    public static String geometryLabel() {
+        if (sGeometry == 0) {
+            return "画面缩放：关闭";
+        }
+        return "画面缩放：×" + formatScale(GEOMETRY_SCALES[sGeometry]);
+    }
+
+    private void broadcastState() {
         for (WebExtension.Port port : mPorts) {
-            postToPort(port, "filter", filterFor(sPreset));
+            broadcastState(port);
+        }
+    }
+
+    private void broadcastState(final WebExtension.Port port) {
+        try {
+            JSONObject message = new JSONObject();
+            message.put("filter", filterFor(sPreset));
+            message.put("geometry", geometryFor(sGeometry));
+            port.postMessage(message);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void broadcast(final String key, final Object value) {
+        for (WebExtension.Port port : mPorts) {
+            postToPort(port, key, value);
         }
     }
 
@@ -162,18 +217,35 @@ public final class DisplayFix {
         return "brightness(" + values[0] + ") contrast(" + values[1] + ")";
     }
 
-    private static int clamp(final int preset) {
-        if (preset < 0) {
-            return 0;
+    private static String geometryFor(final int geometry) {
+        if (geometry <= 0) {
+            return "";
         }
-        if (preset >= PRESET_COUNT) {
-            return PRESET_COUNT - 1;
-        }
-        return preset;
+        return "scale(" + formatScale(GEOMETRY_SCALES[geometry]) + ")";
     }
 
-    private static void persist(final Context context) {
+    private static String formatScale(final float scale) {
+        if (scale == Math.rint(scale)) {
+            return String.valueOf((int) scale);
+        }
+        return String.valueOf(scale);
+    }
+
+    private static int clamp(final int value, final int count) {
+        if (value < 0) {
+            return 0;
+        }
+        if (value >= count) {
+            return count - 1;
+        }
+        return value;
+    }
+
+    private void persist(final Context context) {
         SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-        prefs.edit().putInt(KEY_PRESET, sPreset).apply();
+        prefs.edit()
+                .putInt(KEY_PRESET, sPreset)
+                .putInt(KEY_GEOMETRY, sGeometry)
+                .apply();
     }
 }

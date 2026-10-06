@@ -38,6 +38,12 @@ public class ToolsMenu {
 
         void cycleBrightness();
 
+        void cycleGeometry();
+
+        void reattachVideo();
+
+        void replaceVideo();
+
         void exitApp();
     }
 
@@ -105,6 +111,25 @@ public class ToolsMenu {
             public void onClick(View view) {
                 mHost.cycleBrightness();
                 ((TextView) view).setText(DisplayFix.presetLabel());
+            }
+        });
+        addCycle(container, DisplayFix.geometryLabel(), new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                mHost.cycleGeometry();
+                ((TextView) view).setText(DisplayFix.geometryLabel());
+            }
+        });
+        addAction(container, "重挂视频流", new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                mHost.reattachVideo();
+            }
+        });
+        addAction(container, "替换视频元素", new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                mHost.replaceVideo();
             }
         });
 

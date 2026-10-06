@@ -355,6 +355,21 @@ public class MainActivity extends Activity {
             }
 
             @Override
+            public void cycleGeometry() {
+                mDisplayFix.cycleGeometry(MainActivity.this);
+            }
+
+            @Override
+            public void reattachVideo() {
+                mDisplayFix.reattachVideo();
+            }
+
+            @Override
+            public void replaceVideo() {
+                mDisplayFix.replaceVideo();
+            }
+
+            @Override
             public void exitApp() {
                 moveTaskToBack(true);
             }
