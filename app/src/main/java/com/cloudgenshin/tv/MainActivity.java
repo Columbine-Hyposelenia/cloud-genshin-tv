@@ -5,6 +5,8 @@ import android.app.AlarmManager;
 import android.app.PendingIntent;
 import android.content.Intent;
 import android.graphics.Color;
+import android.graphics.PixelFormat;
+import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.os.Handler;
@@ -370,8 +372,33 @@ public class MainActivity extends Activity {
             }
 
             @Override
+            public void toggleReveal() {
+                mDisplayFix.cycleReveal(MainActivity.this);
+                applyNativeTransparency(DisplayFix.reveal());
+            }
+
+            @Override
             public void exitApp() {
                 moveTaskToBack(true);
+            }
+        });
+    }
+
+    private void applyNativeTransparency(final boolean transparent) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                int color = transparent ? Color.TRANSPARENT : Color.BLACK;
+                if (mRoot != null) {
+                    mRoot.setBackgroundColor(color);
+                }
+                if (mGeckoView != null) {
+                    mGeckoView.setBackgroundColor(color);
+                }
+                getWindow().setBackgroundDrawable(
+                        new ColorDrawable(transparent ? Color.TRANSPARENT : Color.BLACK));
+                getWindow().setFormat(transparent
+                        ? PixelFormat.TRANSLUCENT : PixelFormat.OPAQUE);
             }
         });
     }

@@ -20,6 +20,7 @@ public final class DisplayFix {
     private static final String PREFS_NAME = "display_fix";
     private static final String KEY_PRESET = "preset";
     private static final String KEY_GEOMETRY = "geometry";
+    private static final String KEY_REVEAL = "reveal";
 
     private static final float[][] PRESETS = {
             null,
@@ -38,6 +39,7 @@ public final class DisplayFix {
 
     private static volatile int sPreset;
     private static volatile int sGeometry;
+    private static volatile boolean sReveal;
     private static volatile boolean sExtensionLoaded;
     private static volatile boolean sPortConnected;
 
@@ -76,6 +78,7 @@ public final class DisplayFix {
                 context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         sPreset = clamp(prefs.getInt(KEY_PRESET, 0), PRESET_COUNT);
         sGeometry = clamp(prefs.getInt(KEY_GEOMETRY, 0), GEOMETRY_COUNT);
+        sReveal = prefs.getBoolean(KEY_REVEAL, false);
     }
 
     public void start(final Runnable onReady) {
@@ -112,6 +115,13 @@ public final class DisplayFix {
 
     public void cycleGeometry(final Context context) {
         sGeometry = sGeometry + 1 >= GEOMETRY_COUNT ? 0 : sGeometry + 1;
+        persist(context);
+        broadcastState();
+        requestTelemetry();
+    }
+
+    public void cycleReveal(final Context context) {
+        sReveal = !sReveal;
         persist(context);
         broadcastState();
         requestTelemetry();
@@ -172,6 +182,14 @@ public final class DisplayFix {
         return "画面缩放：×" + formatScale(GEOMETRY_SCALES[sGeometry]);
     }
 
+    public static boolean reveal() {
+        return sReveal;
+    }
+
+    public static String revealLabel() {
+        return sReveal ? "底层画面：露出" : "底层画面：遮蔽";
+    }
+
     private void broadcastState() {
         for (WebExtension.Port port : mPorts) {
             broadcastState(port);
@@ -183,6 +201,7 @@ public final class DisplayFix {
             JSONObject message = new JSONObject();
             message.put("filter", filterFor(sPreset));
             message.put("geometry", geometryFor(sGeometry));
+            message.put("reveal", sReveal);
             port.postMessage(message);
         } catch (Exception ignored) {
         }
@@ -246,6 +265,7 @@ public final class DisplayFix {
         prefs.edit()
                 .putInt(KEY_PRESET, sPreset)
                 .putInt(KEY_GEOMETRY, sGeometry)
+                .putBoolean(KEY_REVEAL, sReveal)
                 .apply();
     }
 }

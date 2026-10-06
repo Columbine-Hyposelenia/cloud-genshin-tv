@@ -4,6 +4,7 @@ const NATIVE_APP = "displayfix";
 let nativePort = null;
 let currentFilter = "";
 let currentGeometry = "";
+let currentReveal = false;
 
 function connectNative() {
   try {
@@ -18,6 +19,10 @@ function connectNative() {
       }
       if (typeof msg.geometry === "string") {
         currentGeometry = msg.geometry;
+        applyFilter();
+      }
+      if (typeof msg.reveal === "boolean") {
+        currentReveal = msg.reveal;
         applyFilter();
       }
       if (msg.reattach) {
@@ -51,10 +56,12 @@ async function activeTabId() {
   return null;
 }
 
-function pageApply(filter, geometry) {
+function pageApply(filter, geometry, reveal) {
   const MARK_FILTER = "__displayFixFilter";
   const MARK_GEOMETRY = "__displayFixGeometry";
+  const MARK_REVEAL = "__displayFixReveal";
   const STYLE_ID = "__displayFixStyle";
+  const REVEAL_STYLE_ID = "__displayFixRevealStyle";
   const AREA = 0.2;
 
   function isVisible(el) {
@@ -138,7 +145,32 @@ function pageApply(filter, geometry) {
     style.textContent = "";
   }
 
-  return { url: location.href, count: media.length, applied: applied };
+  let revealStyle = document.getElementById(REVEAL_STYLE_ID);
+  if (reveal) {
+    const mainVideo = media.length ? media[0] : document.querySelector("video");
+    if (mainVideo) {
+      mainVideo.style.opacity = "0";
+      mainVideo[MARK_REVEAL] = true;
+    }
+    if (!revealStyle) {
+      revealStyle = document.createElement("style");
+      revealStyle.id = REVEAL_STYLE_ID;
+      (document.head || document.documentElement).appendChild(revealStyle);
+    }
+    revealStyle.textContent = "html,body,body *{background:transparent !important;}";
+  } else {
+    if (revealStyle) {
+      revealStyle.textContent = "";
+    }
+    for (const el of media) {
+      if (el[MARK_REVEAL]) {
+        el.style.opacity = "";
+        el[MARK_REVEAL] = false;
+      }
+    }
+  }
+
+  return { url: location.href, count: media.length, applied: applied, reveal: reveal };
 }
 
 function pageReattach() {
@@ -334,7 +366,7 @@ function postNative(obj) {
 
 async function applyFilter() {
   try {
-    await runInPage(pageApply, currentFilter, currentGeometry);
+    await runInPage(pageApply, currentFilter, currentGeometry, currentReveal);
   } catch (e) {
     postNative({ injectError: String(e) });
   }

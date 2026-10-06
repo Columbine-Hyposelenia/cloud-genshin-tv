@@ -44,6 +44,8 @@ public class ToolsMenu {
 
         void replaceVideo();
 
+        void toggleReveal();
+
         void exitApp();
     }
 
@@ -130,6 +132,13 @@ public class ToolsMenu {
             @Override
             public void onClick(View view) {
                 mHost.replaceVideo();
+            }
+        });
+        addCycle(container, DisplayFix.revealLabel(), new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                mHost.toggleReveal();
+                ((TextView) view).setText(DisplayFix.revealLabel());
             }
         });
 
