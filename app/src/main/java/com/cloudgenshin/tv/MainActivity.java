@@ -291,6 +291,12 @@ public class MainActivity extends Activity {
                 }
             }
         };
+        mKeyboardRouter.onGameModeChanged = new Runnable() {
+            @Override
+            public void run() {
+                showStatus(gameModeLabel());
+            }
+        };
         mToolsMenu = new ToolsMenu(this, new ToolsMenu.Host() {
             @Override
             public void reloadPage() {
@@ -380,6 +386,18 @@ public class MainActivity extends Activity {
             public void toggleReveal() {
                 mDisplayFix.cycleReveal(MainActivity.this);
                 applyNativeTransparency(DisplayFix.revealMode() > 0);
+            }
+
+            @Override
+            public void toggleGameMode() {
+                if (mKeyboardRouter != null) {
+                    mKeyboardRouter.toggleGameMode();
+                }
+            }
+
+            @Override
+            public String gameModeLabel() {
+                return MainActivity.this.gameModeLabel();
             }
 
             @Override
@@ -508,6 +526,13 @@ public class MainActivity extends Activity {
                 }
             }
         }
+    }
+
+    private String gameModeLabel() {
+        if (mKeyboardRouter != null && mKeyboardRouter.isGameMode()) {
+            return "游戏模式：开（方向键转视角，L/确认攻击）";
+        }
+        return "游戏模式：关";
     }
 
     private void showStatus(final String text) {

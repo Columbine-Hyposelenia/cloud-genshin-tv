@@ -46,6 +46,10 @@ public class ToolsMenu {
 
         void toggleReveal();
 
+        void toggleGameMode();
+
+        String gameModeLabel();
+
         void exitApp();
     }
 
@@ -139,6 +143,13 @@ public class ToolsMenu {
             public void onClick(View view) {
                 mHost.toggleReveal();
                 ((TextView) view).setText(DisplayFix.revealLabel());
+            }
+        });
+        addCycle(container, mHost.gameModeLabel(), new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                mHost.toggleGameMode();
+                ((TextView) view).setText(mHost.gameModeLabel());
             }
         });
 

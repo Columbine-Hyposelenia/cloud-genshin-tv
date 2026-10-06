@@ -9,10 +9,10 @@ import java.util.Set;
 public class KeyboardRouter {
     private final VirtualMouse mMouse;
     private final Set<Integer> mKeyboardDevices = new HashSet<Integer>();
-    private long mCenterDownTime;
     private int mLastKeyCode = -1;
     private int mLastKeyDevice = -1;
     private long mLastKeyTime;
+    private boolean mGameMode;
 
     public KeyboardRouter(VirtualMouse mouse) {
         mMouse = mouse;
@@ -28,11 +28,34 @@ public class KeyboardRouter {
             mLastKeyTime = SystemClock.uptimeMillis();
         }
 
+        if (keyCode == KeyEvent.KEYCODE_F1) {
+            if (event.getAction() == KeyEvent.ACTION_UP) {
+                onMenuRequested.run();
+            }
+            return true;
+        }
+        if (keyCode == KeyEvent.KEYCODE_F2) {
+            if (event.getAction() == KeyEvent.ACTION_UP) {
+                toggleGameMode();
+            }
+            return true;
+        }
+
         if (isKeyboardSignal(keyCode) && deviceId >= 0) {
             registerKeyboard(deviceId);
         }
 
         if (isKeyboardDevice(deviceId)) {
+            if (mGameMode) {
+                if (isDpadDirection(keyCode)) {
+                    handleDpadDirection(event, keyCode);
+                    return true;
+                }
+                if (keyCode == KeyEvent.KEYCODE_L) {
+                    handleAttack(event);
+                    return true;
+                }
+            }
             return false;
         }
 
@@ -46,12 +69,16 @@ public class KeyboardRouter {
         }
 
         if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
-            handleCenter(event);
+            handleAttack(event);
             return true;
         }
 
         if (keyCode == KeyEvent.KEYCODE_BACK) {
-            handleBack(event);
+            if (mGameMode) {
+                handleSprint(event);
+            } else {
+                handleBack(event);
+            }
             return true;
         }
 
@@ -67,6 +94,19 @@ public class KeyboardRouter {
         return true;
     }
 
+    public void toggleGameMode() {
+        mGameMode = !mGameMode;
+        mMouse.setRelative(mGameMode);
+        if (!mGameMode) {
+            mMouse.stopAll();
+        }
+        onGameModeChanged.run();
+    }
+
+    public boolean isGameMode() {
+        return mGameMode;
+    }
+
     private void handleDpadDirection(KeyEvent event, int keyCode) {
         int dir = directionOf(keyCode);
         if (event.getAction() == KeyEvent.ACTION_DOWN) {
@@ -78,16 +118,19 @@ public class KeyboardRouter {
         }
     }
 
-    private void handleCenter(KeyEvent event) {
+    private void handleAttack(KeyEvent event) {
         if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) {
-            mCenterDownTime = event.getEventTime();
+            mMouse.leftDown();
         } else if (event.getAction() == KeyEvent.ACTION_UP) {
-            long held = event.getEventTime() - mCenterDownTime;
-            if (held >= 480) {
-                mMouse.longPress();
-            } else {
-                mMouse.click();
-            }
+            mMouse.leftUp();
+        }
+    }
+
+    private void handleSprint(KeyEvent event) {
+        if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) {
+            mMouse.rightDown();
+        } else if (event.getAction() == KeyEvent.ACTION_UP) {
+            mMouse.rightUp();
         }
     }
 
@@ -216,6 +259,12 @@ public class KeyboardRouter {
     }
 
     public Runnable onMenuRequested = new Runnable() {
+        @Override
+        public void run() {
+        }
+    };
+
+    public Runnable onGameModeChanged = new Runnable() {
         @Override
         public void run() {
         }

@@ -114,6 +114,8 @@ git -c http.extraheader="Authorization: Basic $(printf 'x-access-token:%s' <TOKE
    - 重挂视频流 —— 动作，即时
    - 替换视频元素 —— 动作，即时
    - 底层画面：遮蔽 / 透明（瞬现）/ 视频层移出 / 视频缩角落 / 视频隐藏（5 档循环，详见 7.3），即时
+   - 游戏模式：关 / 开（详见第 9 节），即时
+   - 全局快捷键：F1 打开本菜单，F2 切换游戏模式
 4. 分区 **解码（切换后重启）**
    - 硬件解码：开启 / 关闭 —— 循环，切换后重启
 5. 分区 **诊断与日志**
@@ -205,10 +207,15 @@ git -c http.extraheader="Authorization: Basic $(printf 'x-access-token:%s' <TOKE
 
 **关于“SurfaceView 后端不渲染”**：GeckoView 的 BACKEND_SURFACE 是把**整个 Gecko 合成页面**放进一个 SurfaceView 表面，解码器仍输出到 Gecko 内部 SurfaceTexture，因此它并不会为 amvideo 平面自动打孔；此前“本机不渲染”可能是该后端在本机 EGL/驱动上真的失败，也可能是“渲染了但被平面/孔遮挡”。鉴于 HoleSurfaceView 已独立实现打孔，无需依赖切换 GeckoView 后端即可验证。
 
-【待设备验证】进入游戏极暗状态后切到档 1（触发窗口 relayout 并同时启用 HoleSurfaceView 全屏孔），重点观察：闪光后画面是否**持续保持正常亮度**（而非回到极暗），操控/声音是否正常：
-- 若持续成功：问题解决，后续进入游戏后自动应用档 1。
+【已确认修复】进入游戏极暗状态后切到**档 1**，窗口 relayout 闪光后，HoleSurfaceView 的全屏透明孔让 amvideo 硬件平面**持续以正常亮度显示**，画面不再回到极暗；声音、操控、网络会话均正常。**画面问题已解决。** 标准操作：进入游戏后把“底层画面”切到档 1（透明/瞬现）。后续可在检测到视频播放后自动应用档 1。
+
+**已知小问题（美观，不影响点击）**：露出状态下虚拟鼠标指针在移动幅度大/长按时会残缺甚至“消失”，但点击仍有效；未露出（网页）时正常。原因：HoleSurfaceView 的全屏 gatherTransparentRegion 把该区域内**窗口自身绘制内容（含虚拟鼠标 overlay View）一并置透明**，指针落在孔区域被打孔。可选修复：把虚拟鼠标改为 `setZOrderOnTop(true)` 的独立 SurfaceView 绘制。暂不处理。
+
+<details><summary>此前验证预案（存档）</summary>
+
 - 若闪光后仍回到极暗：说明 amvideo 平面与应用 SurfaceView 表面的 z 序不满足透出条件，下一步尝试对 HoleSurfaceView `setZOrderMediaOverlay` / 调整其表面格式，或把解码输出改挂自有 SurfaceView 并 `setZOrderOnTop`。
 - 其他可考虑的在线动作：在线切换 `media.hardware-video-decoding.enabled`（Gecko 中为 `RelaxedAtomicBool`，可实时生效），迫使解码器/sink 重建而不重协商 WebRTC、不重载页面。
+</details>
 
 ---
 
@@ -225,7 +232,59 @@ git -c http.extraheader="Authorization: Basic $(printf 'x-access-token:%s' <TOKE
 
 ---
 
-## 9. 工作方式与用户约束
+## 9. 输入与按键（游戏模式）
+
+### 9.1 原神 PC 端默认按键（多来源核实）
+
+| 操作 | 默认按键 |
+| :-- | :-- |
+| 移动 | W / A / S / D |
+| 普攻 | 鼠标左键（**长按 = 重击/蓄力攻击**） |
+| 元素战技 | E（部分角色长按蓄力） |
+| 元素爆发（大招） | Q |
+| 冲刺/闪避 | 左 Shift **或** 鼠标右键 |
+| 跳跃 / 风之翼 | Space |
+| 拾取 / 交互 | F |
+| 弓箭瞄准 | R |
+| 切换队伍角色 | 1 / 2 / 3 / 4（Alt+数字 切换并放大招） |
+| 元素视野 | 长按鼠标中键 |
+| 显示鼠标指针 | 按住 Alt |
+| 行走/奔跑切换 | 左 Ctrl |
+| 快速下落 / 取消攀爬 | X |
+| 地图 / 背包 / 角色 / 任务 | M / B（一说 I）/ C（一说 K）/ J |
+| 派蒙菜单 | Esc |
+
+### 9.2 旧输入方案的问题
+
+- 物理键盘设备一旦发送字母/数字即被识别，其按键**直通页面**（WASD/E/Q/Space/F/Shift 等本就能用）。
+- 遥控器 D-pad 原先驱动一个**绝对指针**，并向 GeckoView 注入 **SOURCE_TOUCHSCREEN 触摸事件**：在桌面 UA 的云游戏里触摸只被偶尔兼容成点击（故确认键偶发普攻、随后识别不到），且**没有真正的鼠标左右键、没有相对位移**，无法稳定普攻/重击/冲刺，也无法转动视角。
+
+### 9.3 游戏模式（本轮新增）
+
+**机制**：`VirtualMouse` 新增向 GeckoView 注入**真正的鼠标事件**（`InputDevice.SOURCE_MOUSE`）：
+- 用带 `buttonState` 的 `MotionEvent.obtain(...)` 重载（API 14+，minSdk21 满足；`setButtonState` 非公开故不用）。
+- 无按键移动 → `ACTION_HOVER_MOVE` 经 `dispatchGenericMotionEvent` 触发 `mousemove`。
+- 左键 → `ACTION_DOWN/UP` + `BUTTON_PRIMARY` 经 `dispatchTouchEvent`；右键 → `BUTTON_SECONDARY`。
+
+**进入/退出**：
+- 键盘 **F1 = 打开工具菜单**；**F2 = 切换游戏模式**（遥控器可用菜单内“游戏模式”项）。
+- 游戏模式 ON（相对模式 `setRelative(true)`）：
+  - **方向键/方向舵 = 相对转视角**（每帧固定 LOOK_SPEED 增量，指针在屏幕内回绕），隐藏指针图标。
+  - **L 键 / 遥控器确认 = 鼠标左键**：按下即 DOWN、松开即 UP（真按住），点按=普攻、长按=重击。
+  - **遥控器返回 = 鼠标右键（冲刺）**（游戏模式下）；键盘冲刺直接用原生 Shift。
+  - WASD/E/Q/Space/F/R/1-4 等继续直通游戏。
+- 游戏模式 OFF：恢复绝对指针与触摸导航；遥控器返回恢复为“后退”。
+
+### 9.4 待设备验证 / 后续
+
+- 验证游戏模式下：方向键转视角是否平滑、L/确认能否稳定普攻与长按重击、Shift/返回冲刺、其余技能键是否正常。
+- 若云游戏需要 **Pointer Lock** 才转视角：后续在页面侧请求 `requestPointerLock` 或由扩展在进入游戏模式时对画布/视频调用。
+- 指针图标在“露出（打孔）”状态下被透明孔裁掉（见 7.3），属美观问题；可改为 `setZOrderOnTop` 的独立 SurfaceView 绘制指针，同时可一并解决本模式指针。
+- 按键映射后续可做成用户可自定义；当前为固定默认。
+
+---
+
+## 10. 工作方式与用户约束
 
 - 中文回复；不用 emoji。
 - 谨慎、严格基于代码与实际信息；不做未产生影响的投机改动；结论结合实测，不臆造。
@@ -237,7 +296,7 @@ git -c http.extraheader="Authorization: Basic $(printf 'x-access-token:%s' <TOKE
 
 ---
 
-## 10. 参考资料（文献）
+## 11. 参考资料（文献）
 
 - AOSP, Android TV 图形架构（TextureView / SurfaceView / 硬件叠加层）：https://source.android.google.cn/docs/core/graphics/arch-tv
 - AOSP, Multimedia tunneling（HWC 合成 tunneled 视频）：https://source.android.google.cn/docs/devices/tv/multimedia-tunneling

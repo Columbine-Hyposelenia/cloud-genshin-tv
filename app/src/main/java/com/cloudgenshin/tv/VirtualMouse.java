@@ -7,6 +7,8 @@ import android.view.Gravity;
 import android.view.InputDevice;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
+import android.view.MotionEvent.PointerCoords;
+import android.view.MotionEvent.PointerProperties;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
@@ -27,6 +29,8 @@ public class VirtualMouse {
     private static final int TICK = 16;
     private static final int CURSOR_SIZE = 32;
     private static final int IDLE_HIDE_DELAY = 3000;
+    private static final float LOOK_SPEED = 26f;
+    private static final int MOUSE_DEVICE_ID = 0;
 
     private final ViewGroup mRoot;
     private final View mTarget;
@@ -43,6 +47,7 @@ public class VirtualMouse {
     private long mLastEdge;
     private int mLastEdgeDir = -1;
     private boolean mRunning;
+    private boolean mRelative;
 
     private final Runnable mTickRunnable = new Runnable() {
         @Override
@@ -213,6 +218,15 @@ public class VirtualMouse {
             vertical += 1f;
         }
 
+        if (mRelative) {
+            float scale = (horizontal != 0f && vertical != 0f) ? DIAGONAL : 1f;
+            mX += horizontal * LOOK_SPEED * scale;
+            mY += vertical * LOOK_SPEED * scale;
+            wrapPointer();
+            dispatchMouseHover();
+            return;
+        }
+
         if (horizontal != 0f) {
             int dir = horizontal > 0 ? DIR_RIGHT : DIR_LEFT;
             mSpeed[dir] = Math.min(MAX_SPEED, mSpeed[dir] + ACCEL * dt);
@@ -234,6 +248,24 @@ public class VirtualMouse {
 
         clampAndScroll(now);
         applyPosition();
+        dispatchMouseHover();
+    }
+
+    private void wrapPointer() {
+        if (mWidth > 0) {
+            if (mX < 0) {
+                mX += mWidth;
+            } else if (mX >= mWidth) {
+                mX -= mWidth;
+            }
+        }
+        if (mHeight > 0) {
+            if (mY < 0) {
+                mY += mHeight;
+            } else if (mY >= mHeight) {
+                mY -= mHeight;
+            }
+        }
     }
 
     private void clampAndScroll(long now) {
@@ -286,6 +318,75 @@ public class VirtualMouse {
     private void applyPosition() {
         mCursor.setX(mX);
         mCursor.setY(mY);
+    }
+
+    public void setRelative(boolean relative) {
+        mRelative = relative;
+        if (relative) {
+            mHandler.removeCallbacks(mHideRunnable);
+            hide();
+            if (mWidth > 0 && mHeight > 0) {
+                mX = mWidth / 2f;
+                mY = mHeight / 2f;
+            }
+        } else {
+            applyPosition();
+        }
+    }
+
+    public boolean isRelative() {
+        return mRelative;
+    }
+
+    private MotionEvent buildMouseEvent(int action, int buttonState, float pressure) {
+        PointerProperties properties = new PointerProperties();
+        properties.id = 0;
+        properties.toolType = MotionEvent.TOOL_TYPE_MOUSE;
+        PointerCoords coords = new PointerCoords();
+        coords.x = mX;
+        coords.y = mY;
+        coords.pressure = pressure;
+        coords.size = 1f;
+        long now = SystemClock.uptimeMillis();
+        return MotionEvent.obtain(now, now, action, 1,
+                new PointerProperties[]{properties},
+                new PointerCoords[]{coords},
+                0, buttonState, 1f, 1f, MOUSE_DEVICE_ID, 0,
+                InputDevice.SOURCE_MOUSE, 0);
+    }
+
+    public void dispatchMouseHover() {
+        MotionEvent event = buildMouseEvent(MotionEvent.ACTION_HOVER_MOVE, 0, 0f);
+        mTarget.dispatchGenericMotionEvent(event);
+        event.recycle();
+    }
+
+    public void leftDown() {
+        MotionEvent event = buildMouseEvent(MotionEvent.ACTION_DOWN,
+                MotionEvent.BUTTON_PRIMARY, 1f);
+        mTarget.dispatchTouchEvent(event);
+        event.recycle();
+    }
+
+    public void leftUp() {
+        MotionEvent event = buildMouseEvent(MotionEvent.ACTION_UP,
+                MotionEvent.BUTTON_PRIMARY, 0f);
+        mTarget.dispatchTouchEvent(event);
+        event.recycle();
+    }
+
+    public void rightDown() {
+        MotionEvent event = buildMouseEvent(MotionEvent.ACTION_DOWN,
+                MotionEvent.BUTTON_SECONDARY, 1f);
+        mTarget.dispatchTouchEvent(event);
+        event.recycle();
+    }
+
+    public void rightUp() {
+        MotionEvent event = buildMouseEvent(MotionEvent.ACTION_UP,
+                MotionEvent.BUTTON_SECONDARY, 0f);
+        mTarget.dispatchTouchEvent(event);
+        event.recycle();
     }
 
     public void click() {
