@@ -13,8 +13,6 @@ import android.view.WindowManager;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileInputStream;
 import java.io.InputStreamReader;
 import java.util.regex.Pattern;
 
@@ -42,7 +40,6 @@ public final class DeviceInfo {
         pass(out, "brightness filter applied", filterApplied(telemetry));
         pass(out, "log capture running", appLog != null && appLog.isRunning());
         pass(out, "logcat readable", AppLog.snapshot().length() > 20);
-        pass(out, "gecko log file", new File(context.getFilesDir(), "gecko.log").length() > 0);
         pass(out, "gpu enumerated", gpu != null);
         pass(out, "h264 hardware decoder", h264Decoder() != null);
         pass(out, "session open", sessionOpen);
@@ -120,11 +117,6 @@ public final class DeviceInfo {
         } else {
             wrap(out, "no telemetry received from content script");
         }
-
-        header(out, "GECKO LOG FILE");
-        File geckoLog = new File(context.getFilesDir(), "gecko.log");
-        line(out, "gecko log bytes", String.valueOf(geckoLog.length()));
-        wrap(out, tailFile(geckoLog, 4000));
 
         header(out, "LOG BUFFER");
         wrap(out, AppLog.bufferInfo().trim());
@@ -325,38 +317,6 @@ public final class DeviceInfo {
 
     private static void header(StringBuilder out, String title) {
         out.append('\n').append(title).append('\n');
-    }
-
-    private static String tailFile(File file, int maxChars) {
-        FileInputStream in = null;
-        try {
-            int length = (int) file.length();
-            if (length <= 0) {
-                return "[empty]";
-            }
-            byte[] data = new byte[length];
-            in = new FileInputStream(file);
-            int offset = 0;
-            int read;
-            while (offset < length
-                    && (read = in.read(data, offset, length - offset)) > 0) {
-                offset += read;
-            }
-            String text = new String(data, 0, offset, "UTF-8");
-            if (text.length() > maxChars) {
-                text = text.substring(text.length() - maxChars);
-            }
-            return text;
-        } catch (Exception e) {
-            return "[read failed] " + e;
-        } finally {
-            if (in != null) {
-                try {
-                    in.close();
-                } catch (Exception ignored) {
-                }
-            }
-        }
     }
 
     private static void line(StringBuilder out, String key, String value) {

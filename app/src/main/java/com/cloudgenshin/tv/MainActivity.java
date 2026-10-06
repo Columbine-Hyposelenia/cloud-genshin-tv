@@ -99,7 +99,6 @@ public class MainActivity extends Activity {
     }
 
     private void buildEngine(boolean verbose) {
-        new File(getFilesDir(), "gecko.log").delete();
         GeckoRuntimeSettings runtimeSettings = new GeckoRuntimeSettings.Builder()
                 .javaScriptEnabled(true)
                 .webFontsEnabled(true)
@@ -161,6 +160,7 @@ public class MainActivity extends Activity {
         if (!mSession.isOpen()) {
             mSession.open(mRuntime);
         }
+        mDisplayFix.bindToSession(mSession);
         mGeckoView.requestFocus();
         mSession.loadUri(TARGET_URL);
     }
@@ -349,11 +349,6 @@ public class MainActivity extends Activity {
             }
 
             @Override
-            public void resetDisplay() {
-                resetDisplay();
-            }
-
-            @Override
             public void cycleBrightness() {
                 int next = (DisplayFix.preset() + 1) % DisplayFix.PRESET_COUNT;
                 mDisplayFix.setPreset(MainActivity.this, next);
@@ -520,25 +515,6 @@ public class MainActivity extends Activity {
         manager.set(AlarmManager.ELAPSED_REALTIME_WAKEUP,
                 SystemClock.elapsedRealtime() + 400, pending);
         Runtime.getRuntime().exit(0);
-    }
-
-    private void resetDisplay() {
-        if (mGeckoView == null || mSession == null) {
-            showStatus("画面尚未就绪");
-            return;
-        }
-        final FrameLayout.LayoutParams params =
-                (FrameLayout.LayoutParams) mGeckoView.getLayoutParams();
-        if (params == null) {
-            return;
-        }
-        mRoot.removeView(mGeckoView);
-        showStatus("正在重置画面…");
-        mHandler.postDelayed(() -> {
-            mRoot.addView(mGeckoView, params);
-            mGeckoView.requestFocus();
-            hideStatus();
-        }, 350);
     }
 
     @Override

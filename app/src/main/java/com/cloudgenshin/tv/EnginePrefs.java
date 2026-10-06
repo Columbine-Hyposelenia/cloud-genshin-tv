@@ -10,22 +10,6 @@ import java.util.Map;
 public final class EnginePrefs {
     private static final String FILE_NAME = "engine_config.yaml";
 
-    private static final String LOG_MODULES =
-            "timestamp,sync,"
-            + "AndroidDecoderModule:5,"
-            + "MediaPipeline:5,"
-            + "RenderThread:5,"
-            + "MediaManager:5,"
-            + "MediaDecoder:4,"
-            + "MediaFormatReader:4,"
-            + "WebRTC:4,"
-            + "WebrtcVideoSessionConduit:4,"
-            + "WebRender:4,"
-            + "Compositor:4,"
-            + "ImageBridge:4,"
-            + "RemoteVideoDecoder:4,"
-            + "VideoEngine:4";
-
     private EnginePrefs() {
     }
 
@@ -61,13 +45,6 @@ public final class EnginePrefs {
         prefs.put("full-screen-api.enabled", true);
         prefs.put("full-screen-api.allow-trusted-requests-only", false);
 
-        Map<String, String> env = new LinkedHashMap<String, String>();
-        if (Diag.isVerbose(context)) {
-            File logFile = new File(context.getFilesDir(), "gecko.log");
-            env.put("MOZ_LOG", LOG_MODULES);
-            env.put("MOZ_LOG_FILE", logFile.getAbsolutePath());
-        }
-
         File file = new File(context.getFilesDir(), FILE_NAME);
         FileOutputStream out = null;
         try {
@@ -83,13 +60,6 @@ public final class EnginePrefs {
                     builder.append(value);
                 }
                 builder.append('\n');
-            }
-            if (!env.isEmpty()) {
-                builder.append("env:\n");
-                for (Map.Entry<String, String> entry : env.entrySet()) {
-                    builder.append("  ").append(entry.getKey()).append(": \"")
-                            .append(entry.getValue()).append("\"\n");
-                }
             }
             out.write(builder.toString().getBytes("UTF-8"));
             out.flush();

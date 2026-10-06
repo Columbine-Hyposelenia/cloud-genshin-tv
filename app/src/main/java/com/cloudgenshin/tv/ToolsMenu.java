@@ -36,8 +36,6 @@ public class ToolsMenu {
 
         void restartEngine();
 
-        void resetDisplay();
-
         void cycleBrightness();
 
         void exitApp();
@@ -107,13 +105,6 @@ public class ToolsMenu {
             public void onClick(View view) {
                 mHost.cycleBrightness();
                 ((TextView) view).setText(DisplayFix.presetLabel());
-            }
-        });
-        addAction(container, "重置画面（不掉线）", new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                dismiss();
-                mHost.resetDisplay();
             }
         });
 

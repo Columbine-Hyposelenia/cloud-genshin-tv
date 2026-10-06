@@ -5,6 +5,7 @@ import android.content.SharedPreferences;
 
 import org.json.JSONObject;
 import org.mozilla.geckoview.GeckoRuntime;
+import org.mozilla.geckoview.GeckoSession;
 import org.mozilla.geckoview.WebExtension;
 
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -34,6 +35,31 @@ public final class DisplayFix {
     private final GeckoRuntime mRuntime;
     private final CopyOnWriteArrayList<WebExtension.Port> mPorts =
             new CopyOnWriteArrayList<WebExtension.Port>();
+    private WebExtension mExtension;
+
+    private final WebExtension.MessageDelegate mMessageDelegate =
+            new WebExtension.MessageDelegate() {
+                @Override
+                public void onConnect(final WebExtension.Port port) {
+                    mPorts.addIfAbsent(port);
+                    sPortConnected = true;
+                    port.setDelegate(new WebExtension.PortDelegate() {
+                        @Override
+                        public void onPortMessage(final Object message,
+                                final WebExtension.Port from) {
+                            handleMessage(message);
+                        }
+
+                        @Override
+                        public void onDisconnect(final WebExtension.Port disconnected) {
+                            mPorts.remove(disconnected);
+                            sPortConnected = !mPorts.isEmpty();
+                        }
+                    });
+                    postToPort(port, "filter", filterFor(sPreset));
+                    postToPort(port, "report", true);
+                }
+            };
 
     public DisplayFix(GeckoRuntime runtime, Context context) {
         mRuntime = runtime;
@@ -46,33 +72,20 @@ public final class DisplayFix {
                 .ensureBuiltIn(EXT_URI, EXT_ID)
                 .accept(extension -> {
                     sExtensionLoaded = true;
-                    extension.setMessageDelegate(new WebExtension.MessageDelegate() {
-                        @Override
-                        public void onConnect(final WebExtension.Port port) {
-                            mPorts.addIfAbsent(port);
-                            sPortConnected = true;
-                            port.setDelegate(new WebExtension.PortDelegate() {
-                                @Override
-                                public void onPortMessage(final Object message,
-                                        final WebExtension.Port from) {
-                                    handleMessage(message);
-                                }
-
-                                @Override
-                                public void onDisconnect(final WebExtension.Port disconnected) {
-                                    mPorts.remove(disconnected);
-                                    sPortConnected = !mPorts.isEmpty();
-                                }
-                            });
-                            postToPort(port, "filter", filterFor(sPreset));
-                            postToPort(port, "report", true);
-                        }
-                    }, NATIVE_APP);
+                    mExtension = extension;
+                    extension.setMessageDelegate(mMessageDelegate, NATIVE_APP);
                     onReady.run();
                 }, error -> {
                     sExtensionLoaded = false;
                     onReady.run();
                 });
+    }
+
+    public void bindToSession(final GeckoSession session) {
+        if (mExtension != null && session != null) {
+            session.getWebExtensionController()
+                    .setMessageDelegate(mExtension, mMessageDelegate, NATIVE_APP);
+        }
     }
 
     public void setPreset(final Context context, final int preset) {

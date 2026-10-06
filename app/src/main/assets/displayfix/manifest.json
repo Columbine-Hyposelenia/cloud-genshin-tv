@@ -12,9 +12,11 @@
     "scripts": ["background.js"]
   },
   "permissions": [
+    "tabs",
     "nativeMessaging",
     "nativeMessagingFromContent",
-    "geckoViewAddons"
+    "geckoViewAddons",
+    "<all_urls>"
   ],
   "content_scripts": [
     {
