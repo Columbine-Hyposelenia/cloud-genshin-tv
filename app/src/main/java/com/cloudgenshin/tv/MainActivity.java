@@ -291,12 +291,6 @@ public class MainActivity extends Activity {
                 }
             }
         };
-        mKeyboardRouter.onGameModeChanged = new Runnable() {
-            @Override
-            public void run() {
-                showStatus(gameModeLabel());
-            }
-        };
         mToolsMenu = new ToolsMenu(this, new ToolsMenu.Host() {
             @Override
             public void reloadPage() {
