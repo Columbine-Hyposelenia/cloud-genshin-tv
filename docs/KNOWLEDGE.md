@@ -20,6 +20,7 @@
 | 进入游戏后画面极暗 | **已解决** | 全屏透明孔透出硬件视频平面，见第 6 节 |
 | 左上角跳动白色小横条 | **已不再影响观看** | 属外部纹理切片，露出后真画面在其下层持续显示 |
 | 游戏输入（鼠标/视角/攻击/冲刺） | **已实现，可用** | 游戏模式，见第 7 节 |
+| 游戏模式切换居中弹窗 | **已移除** | 不再常驻挡屏，状态仅在菜单行显示（见 7.2） |
 | 键盘/遥控器/虚拟鼠标基础操作 | **正常** | 无需调整 |
 | 已知遗留 | 仅 1 项美观问题 | 露出状态下虚拟鼠标指针被透明孔裁切，不影响点击，见 6.5 |
 
@@ -72,6 +73,9 @@
   - `EnvTool.java` — 尝试反射改 `MOZ_LOG`（在 Android 5.1 失败，best-effort）。
   - `AppLog.java` / `DeviceInfo.java` / `Diag.java` / `LogServer.java` — 应用内日志采集、设备/诊断报告、遥测存储、局域网日志 HTTP 服务。
   - `VirtualMouse.java` — 虚拟鼠标与游戏模式输入。
+  - `KeyboardRouter.java` — 统一键盘/遥控按键路由、输入设备识别、游戏模式切换（F1/F2）、攻击/冲刺/视角回调。
+  - `ToolsMenu.java` — 遥控器 D-pad 工具菜单 Dialog（包在 ScrollView 中可滚动）。
+  - `ReportScreen.java` / `GpuInfo.java` — 全屏诊断报告展示、独立 EGL 上下文采集 GPU 信息。
 - `app/src/main/assets/displayfix/` — 内置扩展：`manifest.json`、`background.js`、`content.js`。
 - `installer/` — 安装器模块。
 - `dist/` — 构建产物：`cloud-genshin.apk`（主程序，约 84.7 MB）、`cloud-genshin-installer.apk`（约 133 KB）。
@@ -124,7 +128,7 @@ git -c http.extraheader="Authorization: Basic $(printf 'x-access-token:%s' <TOKE
 
 ## 5. 工具菜单（当前完整条目，自上而下）
 
-菜单整体包在 `ScrollView` 中，可上下滚动（标题提示 dpad up/down to scroll, back to close）。
+菜单整体包在 `ScrollView` 中，可上下滚动；按 BACK/MENU/ESCAPE 关闭。（“dpad up/down to scroll, back to close”这句提示实际出现在诊断报告页 `ReportScreen`，不是工具菜单。）
 
 1. 标题：**工具**
 2. 分区 **画面渲染（网页阶段，切换后重启）**
@@ -137,7 +141,7 @@ git -c http.extraheader="Authorization: Basic $(printf 'x-access-token:%s' <TOKE
    - 替换视频元素 —— 动作，即时
    - 底层画面：遮蔽 / 透明 / 视频层移出 / 视频缩角落 / 视频隐藏（5 档循环，当前使用档 1，详见 6.4），即时
    - 游戏模式：关 / 开（详见第 7 节），即时
-   - 全局快捷键：F1 打开本菜单，F2 切换游戏模式
+   - 注：F1/F2 是物理全局快捷键而非菜单行（F1 打开菜单，F2 切换游戏模式）
 4. 分区 **解码（切换后重启）**
    - 硬件解码：开启 / 关闭 —— 循环，切换后重启
 5. 分区 **诊断与日志**
@@ -152,7 +156,7 @@ git -c http.extraheader="Authorization: Basic $(printf 'x-access-token:%s' <TOKE
    - 重启应用
    - 退出应用
 
-诊断报告（全屏）自上而下包含：SELF TEST、APPLICATION、DEVICE、DISPLAY、MEMORY、GPU/GL、MEDIA CODECS、EFFECTIVE SETTINGS、CONTENT TELEMETRY、GECKO LOG FILE、LOG BUFFER、SYSTEM PROPERTIES (filtered)。
+诊断报告（全屏）自上而下包含：SELF TEST、APPLICATION、DEVICE、DISPLAY、MEMORY、GPU/GL、MEDIA CODECS、EFFECTIVE SETTINGS、CONTENT TELEMETRY、LOG BUFFER、SYSTEM PROPERTIES (filtered)。
 
 ---
 
@@ -259,6 +263,8 @@ git -c http.extraheader="Authorization: Basic $(printf 'x-access-token:%s' <TOKE
   - 遥控器返回 = 鼠标右键（冲刺）；键盘冲刺直接用原生 Shift。
   - WASD/E/Q/Space/F/R/1-4 等继续直通游戏。
 - 游戏模式 OFF：恢复绝对指针与触摸导航；遥控器返回恢复为“后退”。
+
+切换游戏模式不再弹出居中卡片：历史上该卡片使用不自动关闭的 `showStatus`、会常驻挡屏，已在提交 f1762a6 移除（`KeyboardRouter` 保留空实现，切换逻辑不受影响）；当前开/关状态只通过菜单行“游戏模式：…”文字反馈。
 
 ### 7.3 旧输入方案的问题（历史）
 
