@@ -316,10 +316,40 @@ public class ToolsMenu {
     }
 
     private void addTitle(LinearLayout container, String text) {
+        LinearLayout row = new LinearLayout(mContext);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.BOTTOM);
+        row.setPadding(dp(8), 0, dp(8), dp(12));
+
         TextView title = baseText(text, 20, TEXT);
         title.setTypeface(Typeface.DEFAULT_BOLD);
-        title.setPadding(dp(8), 0, dp(8), dp(12));
-        container.addView(title);
+        row.addView(title);
+
+        String version = versionLabel();
+        if (version.length() > 0) {
+            TextView badge = baseText(version, 11, HEADER);
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT);
+            params.leftMargin = dp(6);
+            params.bottomMargin = dp(1);
+            badge.setLayoutParams(params);
+            row.addView(badge);
+        }
+        container.addView(row);
+    }
+
+    private String versionLabel() {
+        try {
+            String name = mContext.getPackageManager()
+                    .getPackageInfo(mContext.getPackageName(), 0).versionName;
+            if (name == null || name.length() == 0) {
+                return "";
+            }
+            return "v" + name;
+        } catch (Throwable throwable) {
+            return "";
+        }
     }
 
     private void addHeader(LinearLayout container, String text) {
