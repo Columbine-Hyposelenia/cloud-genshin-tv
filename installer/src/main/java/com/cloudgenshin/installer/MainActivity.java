@@ -16,12 +16,10 @@ public class MainActivity extends Activity {
             "https://raw.githubusercontent.com/Columbine-Hyposelenia/cloud-genshin-tv/master/dist/cloud-genshin.apk";
 
     private static final String[] MIRRORS = {
+            "https://edgeone.gh-proxy.com/" + RAW,
             "https://gh-proxy.com/" + RAW,
             "https://ghfast.top/" + RAW,
-            "https://cdn.gh-proxy.com/" + RAW,
-            "https://ghproxy.net/" + RAW,
-            "https://cors.isteed.cc/" + RAW,
-            "https://gh.ddlc.top/" + RAW,
+            "https://gh.nxnow.top/" + RAW,
             RAW,
     };
 
