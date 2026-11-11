@@ -33,7 +33,6 @@ import org.mozilla.geckoview.WebNotificationDelegate;
 import org.mozilla.geckoview.WebRequestError;
 
 import java.io.File;
-import java.io.FileOutputStream;
 
 public class MainActivity extends Activity {
     private static final String TARGET_URL = "https://ys.mihoyo.com/cloud/";
@@ -81,9 +80,6 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-
-        DecoderMode.init(this);
-        EngineMode.init(this);
 
         boolean verbose = Diag.isVerbose(this);
         if (verbose) {
@@ -133,9 +129,7 @@ public class MainActivity extends Activity {
         mGeckoView = new GeckoView(this);
         mGeckoView.setFocusable(true);
         mGeckoView.setFocusableInTouchMode(true);
-        mGeckoView.setViewBackend(EngineMode.backend() == EngineMode.BACKEND_SURFACE
-                ? GeckoView.BACKEND_SURFACE_VIEW
-                : GeckoView.BACKEND_TEXTURE_VIEW);
+        mGeckoView.setViewBackend(GeckoView.BACKEND_TEXTURE_VIEW);
         mGeckoView.coverUntilFirstPaint(Color.BLACK);
         mRoot.addView(mGeckoView, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
@@ -337,11 +331,6 @@ public class MainActivity extends Activity {
             }
 
             @Override
-            public void exportLogs() {
-                exportReport();
-            }
-
-            @Override
             public void clearLogs() {
                 AppLog log = AppLog.get();
                 if (log != null) {
@@ -353,27 +342,6 @@ public class MainActivity extends Activity {
             @Override
             public void restartEngine() {
                 restartApp();
-            }
-
-            @Override
-            public void cycleBrightness() {
-                int next = (DisplayFix.preset() + 1) % DisplayFix.PRESET_COUNT;
-                mDisplayFix.setPreset(MainActivity.this, next);
-            }
-
-            @Override
-            public void cycleGeometry() {
-                mDisplayFix.cycleGeometry(MainActivity.this);
-            }
-
-            @Override
-            public void reattachVideo() {
-                mDisplayFix.reattachVideo();
-            }
-
-            @Override
-            public void replaceVideo() {
-                mDisplayFix.replaceVideo();
             }
 
             @Override
@@ -475,51 +443,6 @@ public class MainActivity extends Activity {
         builder.append(log.readFile(log.oldFile(), 400000));
         builder.append(log.readFile(log.liveFile(), 600000));
         return builder.toString();
-    }
-
-    private void exportReport() {
-        String report = buildReport();
-        String logs = readLogs();
-        StringBuilder message = new StringBuilder();
-
-        File internalDir = new File(getFilesDir(), "export");
-        if (!internalDir.exists()) {
-            internalDir.mkdirs();
-        }
-        writeFile(new File(internalDir, "report.txt"), report);
-        writeFile(new File(internalDir, "log.txt"), logs);
-        message.append("internal: ").append(internalDir.getAbsolutePath()).append('\n');
-
-        File externalDir = getExternalFilesDir(null);
-        if (externalDir != null) {
-            if (!externalDir.exists()) {
-                externalDir.mkdirs();
-            }
-            writeFile(new File(externalDir, "report.txt"), report);
-            writeFile(new File(externalDir, "log.txt"), logs);
-            message.append("external: ").append(externalDir.getAbsolutePath());
-        } else {
-            message.append("external: unavailable");
-        }
-
-        showDismissable(message.toString(), 20000);
-    }
-
-    private void writeFile(File file, String content) {
-        FileOutputStream out = null;
-        try {
-            out = new FileOutputStream(file, false);
-            out.write(content.getBytes("UTF-8"));
-            out.flush();
-        } catch (Exception ignored) {
-        } finally {
-            if (out != null) {
-                try {
-                    out.close();
-                } catch (Exception ignored) {
-                }
-            }
-        }
     }
 
     private String gameModeLabel() {

@@ -90,16 +90,13 @@ public final class DeviceInfo {
         codecs(out);
 
         header(out, "EFFECTIVE SETTINGS");
-        line(out, "render backend", EngineMode.backend() == EngineMode.BACKEND_SURFACE
-                ? "SurfaceView" : "TextureView");
-        line(out, "graphics mode", graphicsMode());
-        line(out, "hardware decode", String.valueOf(DecoderMode.hardwareDecode()));
+        line(out, "render backend", "TextureView");
+        line(out, "graphics mode", "hardware WebRender");
+        line(out, "hardware decode", "true");
         line(out, "verbose logging", String.valueOf(Diag.isVerbose(context)));
         if (Diag.isVerbose(context)) {
             line(out, "MOZ_LOG injection", String.valueOf(EnvTool.succeeded()));
         }
-        line(out, "brightness preset", DisplayFix.preset() == 0
-                ? "off" : String.valueOf(DisplayFix.preset()));
         line(out, "keyboard devices", String.valueOf(keyboardCount));
         if (keySummary != null && keySummary.length() > 0) {
             wrap(out, keySummary);
@@ -256,17 +253,6 @@ public final class DeviceInfo {
 
     private static String mb(long bytes) {
         return (bytes / 1024L / 1024L) + " MB";
-    }
-
-    private static String graphicsMode() {
-        int graphics = EngineMode.graphics();
-        if (graphics == EngineMode.GRAPHICS_SOFTWARE) {
-            return "software WebRender";
-        }
-        if (graphics == EngineMode.GRAPHICS_NO_COMPOSITOR) {
-            return "hardware, compositor off";
-        }
-        return "hardware WebRender";
     }
 
     private static String joinAbis() {

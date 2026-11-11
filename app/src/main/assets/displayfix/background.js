@@ -25,12 +25,6 @@ function connectNative() {
         currentRevealMode = msg.revealMode;
         applyFilter();
       }
-      if (msg.reattach) {
-        reattachVideo();
-      }
-      if (msg.replace) {
-        replaceVideo();
-      }
       if (msg.report) {
         collectTelemetry();
       }
@@ -150,24 +144,7 @@ function pageApply(filter, geometry, revealMode) {
   if (revealMode > 0) {
     if (mainVideo) {
       mainVideo[MARK_REVEAL] = true;
-      if (revealMode === 1) {
-        mainVideo.style.opacity = "0";
-      } else if (revealMode === 2) {
-        mainVideo.style.position = "fixed";
-        mainVideo.style.left = "0";
-        mainVideo.style.top = "0";
-        mainVideo.style.margin = "0";
-        mainVideo.style.transform = "translateX(-1500px)";
-      } else if (revealMode === 3) {
-        mainVideo.style.position = "fixed";
-        mainVideo.style.left = "0";
-        mainVideo.style.top = "0";
-        mainVideo.style.margin = "0";
-        mainVideo.style.width = "2px";
-        mainVideo.style.height = "2px";
-      } else if (revealMode === 4) {
-        mainVideo.style.display = "none";
-      }
+      mainVideo.style.opacity = "0";
     }
     if (!revealStyle) {
       revealStyle = document.createElement("style");
@@ -182,14 +159,6 @@ function pageApply(filter, geometry, revealMode) {
     for (const el of media) {
       if (el[MARK_REVEAL]) {
         el.style.opacity = "";
-        el.style.position = "";
-        el.style.left = "";
-        el.style.top = "";
-        el.style.margin = "";
-        el.style.transform = "";
-        el.style.width = "";
-        el.style.height = "";
-        el.style.display = "";
         el[MARK_REVEAL] = false;
       }
     }
@@ -201,42 +170,6 @@ function pageApply(filter, geometry, revealMode) {
     applied: applied,
     revealMode: revealMode
   };
-}
-
-function pageReattach() {
-  const video = document.querySelector("video");
-  if (!video) {
-    return false;
-  }
-  const stream = video.srcObject;
-  video.srcObject = null;
-  if (stream) {
-    video.srcObject = stream;
-  }
-  const play = video.play && video.play();
-  if (play && play.catch) {
-    play.catch(() => {});
-  }
-  return true;
-}
-
-function pageReplace() {
-  const old = document.querySelector("video");
-  if (!old || !old.parentNode) {
-    return false;
-  }
-  const stream = old.srcObject;
-  const replacement = old.cloneNode(false);
-  if (stream) {
-    replacement.srcObject = stream;
-  }
-  replacement.autoplay = true;
-  old.parentNode.replaceChild(replacement, old);
-  const play = replacement.play && replacement.play();
-  if (play && play.catch) {
-    play.catch(() => {});
-  }
-  return true;
 }
 
 function pageTelemetry() {
@@ -400,26 +333,6 @@ async function applyFilter() {
   } catch (e) {
     postNative({ injectError: String(e) });
   }
-}
-
-async function reattachVideo() {
-  try {
-    await runInPage(pageReattach);
-  } catch (e) {
-    postNative({ injectError: String(e) });
-  }
-  setTimeout(applyFilter, 250);
-  setTimeout(collectTelemetry, 700);
-}
-
-async function replaceVideo() {
-  try {
-    await runInPage(pageReplace);
-  } catch (e) {
-    postNative({ injectError: String(e) });
-  }
-  setTimeout(applyFilter, 350);
-  setTimeout(collectTelemetry, 900);
 }
 
 async function collectTelemetry() {

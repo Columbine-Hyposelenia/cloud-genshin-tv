@@ -16,9 +16,9 @@ public final class EnginePrefs {
     public static String prepare(Context context) {
         Map<String, Object> prefs = new LinkedHashMap<String, Object>();
 
-        prefs.put("media.webrtc.hw.h264.enabled", DecoderMode.hardwareDecode());
-        prefs.put("media.hardware-video-decoding.enabled", DecoderMode.hardwareDecode());
-        prefs.put("media.navigator.mediadatadecoder_h264_enabled", DecoderMode.hardwareDecode());
+        prefs.put("media.webrtc.hw.h264.enabled", true);
+        prefs.put("media.hardware-video-decoding.enabled", true);
+        prefs.put("media.navigator.mediadatadecoder_h264_enabled", true);
 
         prefs.put("media.autoplay.default", 0);
         prefs.put("media.autoplay.blocking_policy", 0);
@@ -32,12 +32,6 @@ public final class EnginePrefs {
         prefs.put("webgl.disabled", false);
         prefs.put("webgl.enable-webgl2", true);
         prefs.put("webgl.force-enabled", true);
-
-        int graphics = EngineMode.graphics();
-        prefs.put("gfx.webrender.software", graphics == EngineMode.GRAPHICS_SOFTWARE);
-        if (graphics == EngineMode.GRAPHICS_NO_COMPOSITOR) {
-            prefs.put("gfx.webrender.compositor", false);
-        }
 
         prefs.put("gfx.color_management.mode", 2);
         prefs.put("gfx.color_management.enablev4", true);

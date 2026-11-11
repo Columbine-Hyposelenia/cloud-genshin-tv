@@ -30,19 +30,9 @@ public class ToolsMenu {
 
         String toggleVerbose();
 
-        void exportLogs();
-
         void clearLogs();
 
         void restartEngine();
-
-        void cycleBrightness();
-
-        void cycleGeometry();
-
-        void reattachVideo();
-
-        void replaceVideo();
 
         void toggleReveal();
 
@@ -91,53 +81,7 @@ public class ToolsMenu {
 
         addTitle(container, "工具");
 
-        addHeader(container, "画面渲染（网页阶段，切换后重启）");
-        addCycle(container, backendLabel(), new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                int next = EngineMode.backend() == EngineMode.BACKEND_TEXTURE
-                        ? EngineMode.BACKEND_SURFACE : EngineMode.BACKEND_TEXTURE;
-                EngineMode.setBackend(mContext, next);
-                ((TextView) view).setText(backendLabel());
-                scheduleRestart();
-            }
-        });
-        addCycle(container, graphicsLabel(), new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                EngineMode.setGraphics(mContext, nextGraphics());
-                ((TextView) view).setText(graphicsLabel());
-                scheduleRestart();
-            }
-        });
-
         addHeader(container, "画面（游戏中即时生效）");
-        addCycle(container, DisplayFix.presetLabel(), new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                mHost.cycleBrightness();
-                ((TextView) view).setText(DisplayFix.presetLabel());
-            }
-        });
-        addCycle(container, DisplayFix.geometryLabel(), new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                mHost.cycleGeometry();
-                ((TextView) view).setText(DisplayFix.geometryLabel());
-            }
-        });
-        addAction(container, "重挂视频流", new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                mHost.reattachVideo();
-            }
-        });
-        addAction(container, "替换视频元素", new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                mHost.replaceVideo();
-            }
-        });
         addCycle(container, DisplayFix.revealLabel(), new View.OnClickListener() {
             @Override
             public void onClick(View view) {
@@ -150,16 +94,6 @@ public class ToolsMenu {
             public void onClick(View view) {
                 mHost.toggleGameMode();
                 ((TextView) view).setText(mHost.gameModeLabel());
-            }
-        });
-
-        addHeader(container, "解码（切换后重启）");
-        addCycle(container, hardwareLabel(), new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                DecoderMode.setHardwareDecode(mContext, !DecoderMode.hardwareDecode());
-                ((TextView) view).setText(hardwareLabel());
-                scheduleRestart();
             }
         });
 
@@ -182,13 +116,6 @@ public class ToolsMenu {
             public void onClick(View view) {
                 ((TextView) view).setText(mHost.toggleVerbose());
                 scheduleRestart();
-            }
-        });
-        addAction(container, "导出诊断与日志", new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                dismiss();
-                mHost.exportLogs();
             }
         });
         addAction(container, "清空日志", new View.OnClickListener() {
@@ -271,44 +198,10 @@ public class ToolsMenu {
         }, 650);
     }
 
-    private int nextGraphics() {
-        int current = EngineMode.graphics();
-        if (current == EngineMode.GRAPHICS_HARDWARE) {
-            return EngineMode.GRAPHICS_SOFTWARE;
-        }
-        if (current == EngineMode.GRAPHICS_SOFTWARE) {
-            return EngineMode.GRAPHICS_NO_COMPOSITOR;
-        }
-        return EngineMode.GRAPHICS_HARDWARE;
-    }
-
     public void dismiss() {
         if (mDialog != null && mDialog.isShowing()) {
             mDialog.dismiss();
         }
-    }
-
-    private String backendLabel() {
-        return "渲染后端：" + (EngineMode.backend() == EngineMode.BACKEND_SURFACE
-                ? "SurfaceView" : "TextureView（默认）");
-    }
-
-    private String graphicsLabel() {
-        int graphics = EngineMode.graphics();
-        if (graphics == EngineMode.GRAPHICS_SOFTWARE) {
-            return "图形模式：软件 WebRender";
-        }
-        if (graphics == EngineMode.GRAPHICS_NO_COMPOSITOR) {
-            return "图形模式：硬件·合成器关闭";
-        }
-        return "图形模式：硬件 WebRender（默认）";
-    }
-
-    private String hardwareLabel() {
-        if (DecoderMode.hardwareDecode()) {
-            return "硬件解码：开启";
-        }
-        return "硬件解码：关闭（软件解码）";
     }
 
     private String verboseLabel() {
