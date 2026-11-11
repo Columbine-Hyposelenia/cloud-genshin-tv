@@ -109,10 +109,23 @@ python3 build_release.py
 
 ### 分发机制
 
-- 安装器从固定地址下载主 APK：
+- 安装器从以下地址下载主 APK（`RAW` 即该地址，其余通道为其镜像前缀拼接）：
   `https://raw.githubusercontent.com/Columbine-Hyposelenia/cloud-genshin-tv/master/dist/cloud-genshin.apk`
-- 备用镜像前缀（依次拼接该 RAW）：`https://cors.isteed.cc/`、`https://ghfast.top/`、`https://gh-proxy.com/`、`https://ghproxy.net/`、`https://gh.ddlc.cc/`。
-- 安装器只认 master 上的 `dist/cloud-genshin.apk`，每次更新都必须把新 APK 提交并推送到 master 该路径；用户沿用旧安装器即可下到最新版，无需单独交付安装器。
+- 【当前】通道列表（`installer/.../MainActivity.java` 的 `MIRRORS`，顺序仅作兜底，实际由板端测速择优）：
+  1. `https://gh-proxy.com/` + RAW
+  2. `https://ghfast.top/` + RAW
+  3. `https://cdn.gh-proxy.com/` + RAW
+  4. `https://ghproxy.net/` + RAW
+  5. `https://cors.isteed.cc/` + RAW
+  6. `https://gh.ddlc.top/` + RAW
+  7. RAW（官方源兜底）
+- 【当前】下载策略（`ApkDownloader.java`）：
+  - **板端测速择优**：并发对每个通道请求 `Range: bytes=0-524287`（512 KB，8 s 上限），校验 HTTP 200/206 且首字节为 `0x50`（APK 的 `PK` 魔法），按实测速率降序排列；失败通道排到最后仍会兜底尝试。状态栏依次显示 `measuring mirror speed...` 与 `speed 6:2316kB/s | 1:629kB/s ...`。
+  - **多段并发下载**：对首选通道先 `Range: bytes=0-0` 取总长（需 206 且 > 8 MB），再用 4 个线程分段（各自 `Range` + 独立 `FileChannel.write(buffer, position)` 绝对定位写入同一文件，不占额外空间），进度按累计字节汇总；任一段失败或服务器不支持 206/`Content-Range` 不匹配即整段回退为单连接下载（原逻辑）。
+  - **完整性校验**：大小与 `Content-Length`/总长一致、首 4 字节为 `PK\x03\x04`，否则判为无效并切换下一通道。
+- 【实测·2026-11】用真实 `ApkDownloader.java`（配 Android 桩类，JDK17）对线上产物完整下载验证：84,730,989 字节、耗时约 18.7 s、均速约 4.4 MB/s（单连接探测为 2.3 MB/s，4 段并发约 1.9 倍）；下载结果与远端 master 的 blob **逐字节一致**（SHA256 `25b4902...`），apksigner 校验通过、`unzip -t` 无损。
+- 安装器只认 master 上的 `dist/cloud-genshin.apk`；主程序更新时把新 APK 提交推送到 master 该路径即可，用户沿用旧安装器即可下到最新版。
+- 安装器自身更新需手动安装 `dist/cloud-genshin-installer.apk`（无自更新通道）。
 
 ### 推送（单次，勿反复试错）
 

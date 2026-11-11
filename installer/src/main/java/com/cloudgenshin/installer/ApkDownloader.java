@@ -8,9 +8,12 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.RandomAccessFile;
 import java.net.HttpURLConnection;
 import java.net.Socket;
 import java.net.URL;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 
@@ -36,10 +39,23 @@ public class ApkDownloader {
     private static final int MAX_ATTEMPTS = 2;
     private static final long RETRY_DELAY = 2000L;
 
+    private static final String UA = "Mozilla/5.0 (Linux; Android 5.1) AppleWebKit/537.36 "
+            + "(KHTML, like Gecko) Chrome/39.0.0.0 Safari/537.36";
+
+    private static final int PROBE_BYTES = 512 * 1024;
+    private static final int PROBE_TIMEOUT_MS = 8000;
+    private static final long MIN_PROBE_BYTES = 96L * 1024;
+    private static final int SEGMENTS = 4;
+    private static final long MIN_SEGMENTED_TOTAL = 8L * 1024 * 1024;
+    private static final long MIN_FILE = 1L * 1024 * 1024;
+
     private final Context mContext;
     private final Handler mMain = new Handler(Looper.getMainLooper());
     private Thread mWorker;
     private volatile boolean mCancelled;
+    private volatile long mDownloaded;
+    private volatile long mTotal;
+    private volatile int mLastPercent = -1;
 
     public ApkDownloader(Context context) {
         mContext = context;
@@ -54,11 +70,12 @@ public class ApkDownloader {
         mWorker = new Thread(new Runnable() {
             @Override
             public void run() {
+                String[] ranked = rankBySpeed(urls, listener);
                 String lastError = "unknown error";
-                for (int mirror = 0; mirror < urls.length && !mCancelled; mirror++) {
-                    String label = "mirror " + (mirror + 1) + "/" + urls.length;
+                for (int i = 0; i < ranked.length && !mCancelled; i++) {
+                    String label = "mirror " + (i + 1) + "/" + ranked.length;
                     for (int attempt = 1; attempt <= MAX_ATTEMPTS && !mCancelled; attempt++) {
-                        String error = attemptDownload(urls[mirror], listener, attempt, label);
+                        String error = attemptDownload(ranked[i], listener, attempt, label);
                         if (error == null) {
                             return;
                         }
@@ -68,7 +85,7 @@ public class ApkDownloader {
                             sleep(RETRY_DELAY);
                         }
                     }
-                    if (mirror < urls.length - 1 && !mCancelled) {
+                    if (i < ranked.length - 1 && !mCancelled) {
                         postStatus(listener, "switching mirror...");
                         sleep(800L);
                     }
@@ -79,12 +96,334 @@ public class ApkDownloader {
         mWorker.start();
     }
 
+    private String[] rankBySpeed(String[] urls, Listener listener) {
+        if (urls.length <= 1) {
+            return urls;
+        }
+        postStatus(listener, "measuring mirror speed...");
+        final long[] speed = new long[urls.length];
+        Thread[] threads = new Thread[urls.length];
+        for (int i = 0; i < urls.length; i++) {
+            final int index = i;
+            final String url = urls[i];
+            threads[i] = new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    speed[index] = probeSpeed(url);
+                }
+            }, "probe-" + i);
+            threads[i].start();
+        }
+        long deadline = System.currentTimeMillis() + PROBE_TIMEOUT_MS + 4000L;
+        for (int i = 0; i < threads.length; i++) {
+            long remaining = deadline - System.currentTimeMillis();
+            if (remaining < 1) {
+                remaining = 1;
+            }
+            try {
+                threads[i].join(remaining);
+            } catch (InterruptedException ignored) {
+            }
+            if (threads[i].isAlive()) {
+                threads[i].interrupt();
+            }
+        }
+        Integer[] order = new Integer[urls.length];
+        for (int i = 0; i < order.length; i++) {
+            order[i] = i;
+        }
+        for (int i = 0; i < order.length; i++) {
+            for (int j = i + 1; j < order.length; j++) {
+                if (speed[order[j]] > speed[order[i]]) {
+                    Integer tmp = order[i];
+                    order[i] = order[j];
+                    order[j] = tmp;
+                }
+            }
+        }
+        String[] ranked = new String[urls.length];
+        StringBuilder summary = new StringBuilder();
+        for (int i = 0; i < order.length; i++) {
+            ranked[i] = urls[order[i]];
+            if (summary.length() > 0) {
+                summary.append(" | ");
+            }
+            summary.append(order[i] + 1).append(':');
+            summary.append(speed[order[i]] > 0 ? kbps(speed[order[i]]) : "fail");
+        }
+        postStatus(listener, "speed " + summary);
+        return ranked;
+    }
+
+    private static String kbps(long bytesPerSecond) {
+        return (bytesPerSecond / 1024) + "kB/s";
+    }
+
+    private long probeSpeed(String url) {
+        HttpURLConnection connection = null;
+        InputStream input = null;
+        try {
+            connection = (HttpURLConnection) new URL(url).openConnection();
+            connection.setConnectTimeout(6000);
+            connection.setReadTimeout(6000);
+            connection.setInstanceFollowRedirects(true);
+            connection.setRequestProperty("Range", "bytes=0-" + (PROBE_BYTES - 1));
+            connection.setRequestProperty("Accept", "application/vnd.android.package-archive");
+            connection.setRequestProperty("User-Agent", UA);
+            if (connection instanceof HttpsURLConnection) {
+                applyTls12((HttpsURLConnection) connection);
+            }
+            connection.connect();
+            int code = connection.getResponseCode();
+            if (code != 200 && code != 206) {
+                return -1;
+            }
+            input = connection.getInputStream();
+            byte[] buffer = new byte[16384];
+            long start = System.currentTimeMillis();
+            long got = 0;
+            int read;
+            while (got < PROBE_BYTES && !mCancelled) {
+                read = input.read(buffer);
+                if (read <= 0) {
+                    break;
+                }
+                if (got == 0 && (buffer[0] & 0xFF) != 0x50) {
+                    return -1;
+                }
+                got += read;
+                if (System.currentTimeMillis() - start > PROBE_TIMEOUT_MS) {
+                    break;
+                }
+            }
+            long elapsed = System.currentTimeMillis() - start;
+            if (got < MIN_PROBE_BYTES) {
+                return -1;
+            }
+            if (elapsed < 1) {
+                elapsed = 1;
+            }
+            return got * 1000L / elapsed;
+        } catch (Throwable throwable) {
+            return -1;
+        } finally {
+            closeQuietly(input);
+            if (connection != null) {
+                connection.disconnect();
+            }
+        }
+    }
+
     private String attemptDownload(String url, Listener listener, int attempt, String label) {
+        postStatus(listener, label + (attempt == 1 ? " connecting..." : " reconnecting..."));
+        String segmented = attemptSegmented(url, listener, label);
+        if (segmented == null) {
+            return null;
+        }
+        if (mCancelled) {
+            return "cancelled";
+        }
+        postStatus(listener, label + ": parallel failed (" + segmented + "), retrying plain...");
+        return attemptPlain(url, listener, label);
+    }
+
+    private String attemptSegmented(String url, Listener listener, String label) {
+        HttpURLConnection connection = null;
+        InputStream input = null;
+        RandomAccessFile raf = null;
+        try {
+            connection = open(url);
+            connection.setRequestProperty("Range", "bytes=0-0");
+            connection.connect();
+            if (connection.getResponseCode() != 206) {
+                return "no range support";
+            }
+            input = connection.getInputStream();
+            input.read();
+            String contentRange = connection.getHeaderField("Content-Range");
+            long total = parseTotal(contentRange);
+            closeQuietly(input);
+            input = null;
+            connection.disconnect();
+            connection = null;
+            if (total < MIN_SEGMENTED_TOTAL) {
+                return "size unknown";
+            }
+
+            File target = targetFile();
+            File parent = target.getParentFile();
+            if (parent != null && !parent.exists()) {
+                parent.mkdirs();
+            }
+            if (target.exists()) {
+                target.delete();
+            }
+            raf = new RandomAccessFile(target, "rw");
+            raf.setLength(total);
+
+            mDownloaded = 0L;
+            mTotal = total;
+            mLastPercent = -1;
+            postProgress(listener, 0);
+
+            long chunk = total / SEGMENTS;
+            Thread[] threads = new Thread[SEGMENTS];
+            String[] errors = new String[SEGMENTS];
+            for (int i = 0; i < SEGMENTS; i++) {
+                long start = i * chunk;
+                long end = (i == SEGMENTS - 1) ? total - 1 : (start + chunk - 1);
+                final long segStart = start;
+                final long segEnd = end;
+                final String segUrl = url;
+                final String[] segErrors = errors;
+                final int segIndex = i;
+                threads[i] = new Thread(new Runnable() {
+                    @Override
+                    public void run() {
+                        String result = downloadSegment(segUrl, segStart, segEnd, listener);
+                        segErrors[segIndex] = result;
+                    }
+                }, "seg-" + i);
+                threads[i].start();
+            }
+            for (int i = 0; i < SEGMENTS; i++) {
+                try {
+                    threads[i].join();
+                } catch (InterruptedException interrupted) {
+                    mCancelled = true;
+                }
+            }
+            for (int i = 0; i < SEGMENTS; i++) {
+                if (errors[i] != null) {
+                    return errors[i];
+                }
+            }
+            raf.close();
+            raf = null;
+
+            long actual = target.length();
+            if (actual < MIN_FILE) {
+                return "file too small (" + actual + ")";
+            }
+            if (actual != total) {
+                return "incomplete: expected " + total + " got " + actual;
+            }
+            if (!hasZipMagic(target)) {
+                return "not a valid apk";
+            }
+            postProgress(listener, 100);
+            postReady(listener, target.getAbsolutePath());
+            return null;
+        } catch (Throwable throwable) {
+            String message = throwable.getMessage();
+            if (message == null || message.length() == 0) {
+                message = throwable.getClass().getSimpleName();
+            }
+            return message;
+        } finally {
+            closeQuietly(input);
+            if (connection != null) {
+                connection.disconnect();
+            }
+            if (raf != null) {
+                try {
+                    raf.close();
+                } catch (Throwable ignored) {
+                }
+            }
+        }
+    }
+
+    private String downloadSegment(String url, long start, long end, Listener listener) {
+        HttpURLConnection connection = null;
+        InputStream input = null;
+        RandomAccessFile raf = null;
+        try {
+            connection = open(url);
+            connection.setRequestProperty("Range", "bytes=" + start + "-" + end);
+            connection.connect();
+            int code = connection.getResponseCode();
+            if (code != 206) {
+                return "range rejected: HTTP " + code;
+            }
+            String contentRange = connection.getHeaderField("Content-Range");
+            if (contentRange == null || !contentRange.startsWith("bytes " + start + "-")) {
+                return "range mismatch";
+            }
+            input = connection.getInputStream();
+            raf = new RandomAccessFile(targetFile(), "rw");
+            FileChannel channel = raf.getChannel();
+            byte[] buffer = new byte[65536];
+            long position = start;
+            int read;
+            while (position <= end && !mCancelled) {
+                read = input.read(buffer);
+                if (read <= 0) {
+                    break;
+                }
+                long allow = end - position + 1;
+                int length = read;
+                if (length > allow) {
+                    length = (int) allow;
+                }
+                ByteBuffer slice = ByteBuffer.wrap(buffer, 0, length);
+                while (slice.hasRemaining()) {
+                    position += channel.write(slice, position);
+                }
+                mDownloaded += length;
+                publishProgress(listener);
+            }
+            channel.close();
+            raf.close();
+            raf = null;
+            if (mCancelled) {
+                return "cancelled";
+            }
+            if (position <= end) {
+                return "segment truncated at " + position;
+            }
+            return null;
+        } catch (Throwable throwable) {
+            String message = throwable.getMessage();
+            if (message == null || message.length() == 0) {
+                message = throwable.getClass().getSimpleName();
+            }
+            return message;
+        } finally {
+            closeQuietly(input);
+            if (connection != null) {
+                connection.disconnect();
+            }
+            if (raf != null) {
+                try {
+                    raf.close();
+                } catch (Throwable ignored) {
+                }
+            }
+        }
+    }
+
+    private void publishProgress(Listener listener) {
+        long total = mTotal;
+        if (total <= 0) {
+            return;
+        }
+        int percent = (int) (mDownloaded * 100L / total);
+        if (percent > 99) {
+            percent = 99;
+        }
+        if (percent != mLastPercent) {
+            mLastPercent = percent;
+            postProgress(listener, percent);
+        }
+    }
+
+    private String attemptPlain(String url, Listener listener, String label) {
         HttpURLConnection connection = null;
         InputStream input = null;
         FileOutputStream output = null;
         try {
-            postStatus(listener, label + (attempt == 1 ? " connecting..." : " reconnecting..."));
+            postStatus(listener, label + " plain download...");
             File target = targetFile();
             File parent = target.getParentFile();
             if (parent != null && !parent.exists()) {
@@ -94,17 +433,7 @@ public class ApkDownloader {
                 target.delete();
             }
 
-            connection = (HttpURLConnection) new URL(url).openConnection();
-            connection.setConnectTimeout(25000);
-            connection.setReadTimeout(45000);
-            connection.setInstanceFollowRedirects(true);
-            connection.setRequestProperty("Accept", "application/vnd.android.package-archive");
-            connection.setRequestProperty("User-Agent",
-                    "Mozilla/5.0 (Linux; Android 5.1) AppleWebKit/537.36 (KHTML, like Gecko) "
-                            + "Chrome/39.0.0.0 Safari/537.36");
-            if (connection instanceof HttpsURLConnection) {
-                applyTls12((HttpsURLConnection) connection);
-            }
+            connection = open(url);
             connection.connect();
 
             int code = connection.getResponseCode();
@@ -148,7 +477,7 @@ public class ApkDownloader {
             input.close();
 
             long actual = target.length();
-            if (actual < 1024 * 1024) {
+            if (actual < MIN_FILE) {
                 return "file too small (" + actual + ")";
             }
             if (total > 0 && actual != total) {
@@ -166,20 +495,48 @@ public class ApkDownloader {
             }
             return message;
         } finally {
-            try {
-                if (output != null) {
-                    output.close();
-                }
-            } catch (Throwable ignored) {
-            }
-            try {
-                if (input != null) {
-                    input.close();
-                }
-            } catch (Throwable ignored) {
-            }
+            closeQuietly(input);
             if (connection != null) {
                 connection.disconnect();
+            }
+            closeQuietly(output);
+        }
+    }
+
+    private HttpURLConnection open(String url) throws IOException {
+        HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
+        connection.setConnectTimeout(20000);
+        connection.setReadTimeout(45000);
+        connection.setInstanceFollowRedirects(true);
+        connection.setRequestProperty("Accept", "application/vnd.android.package-archive");
+        connection.setRequestProperty("User-Agent", UA);
+        connection.setRequestProperty("Accept-Encoding", "identity");
+        if (connection instanceof HttpsURLConnection) {
+            applyTls12((HttpsURLConnection) connection);
+        }
+        return connection;
+    }
+
+    private long parseTotal(String contentRange) {
+        if (contentRange == null) {
+            return -1;
+        }
+        int slash = contentRange.lastIndexOf('/');
+        if (slash < 0) {
+            return -1;
+        }
+        try {
+            return Long.parseLong(contentRange.substring(slash + 1).trim());
+        } catch (Throwable throwable) {
+            return -1;
+        }
+    }
+
+    private void closeQuietly(java.io.Closeable closeable) {
+        if (closeable != null) {
+            try {
+                closeable.close();
+            } catch (Throwable ignored) {
             }
         }
     }
@@ -196,12 +553,7 @@ public class ApkDownloader {
         } catch (Throwable throwable) {
             return false;
         } finally {
-            if (stream != null) {
-                try {
-                    stream.close();
-                } catch (Throwable ignored) {
-                }
-            }
+            closeQuietly(stream);
         }
     }
 
