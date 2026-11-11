@@ -12,7 +12,6 @@ import android.view.MotionEvent.PointerProperties;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
-import android.widget.ImageView;
 
 public class VirtualMouse {
     public static final int DIR_LEFT = 0;
@@ -34,7 +33,7 @@ public class VirtualMouse {
 
     private final ViewGroup mRoot;
     private final View mTarget;
-    private final ImageView mCursor;
+    private final CursorSurfaceView mCursor;
     private final Handler mHandler;
 
     private final boolean[] mHeld = new boolean[4];
@@ -72,8 +71,7 @@ public class VirtualMouse {
         mRoot = root;
         mTarget = target;
         mHandler = new Handler(Looper.getMainLooper());
-        mCursor = new ImageView(root.getContext());
-        mCursor.setImageResource(R.drawable.cursor);
+        mCursor = new CursorSurfaceView(root.getContext());
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(dp(CURSOR_SIZE), dp(CURSOR_SIZE));
         params.gravity = Gravity.TOP | Gravity.LEFT;
         mCursor.setLayoutParams(params);
@@ -427,7 +425,7 @@ public class VirtualMouse {
 
     public void show() {
         mCursor.setVisibility(View.VISIBLE);
-        mCursor.bringToFront();
+        mCursor.drawCursor();
     }
 
     public void hide() {
